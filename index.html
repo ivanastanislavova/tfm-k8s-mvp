@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>K8s Agentic Deploy</title>
+</head>
+<body>
+
+<h2>Deploy con lenguaje natural</h2>
+
+<input id="input" style="width:300px" placeholder="deploy nginx with 2 replicas">
+<button onclick="deploy()">Deploy</button>
+
+<pre id="output"></pre>
+
+<script>
+async function deploy() {
+  const text = document.getElementById("input").value;
+
+  const res = await fetch("http://127.0.0.1:8000/deploy", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({text})
+  });
+
+  const data = await res.json();
+
+  document.getElementById("output").textContent = JSON.stringify(data, null, 2);
+}
+</script>
+
+</body>
+</html>

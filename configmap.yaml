@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: conv-app-config
+data:
+  ENV: "prod"
+  DEBUG: "false"

@@ -1,0 +1,9 @@
+{
+  "provider": "minikube",
+  "cluster": "local",
+  "ssh_user": "",
+  "master": {
+    "host": "minikube"
+  },
+  "workers": []
+}
