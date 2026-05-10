@@ -25,6 +25,7 @@ class DeployRequest(BaseModel):
     text: str
     session_id: str = "default"
     llm_model: str = "llama3.2:3b"
+    generation_mode: str = "hybrid_template"
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -51,6 +52,14 @@ def home():
 
       <br><br>
 
+      <label>Versión:</label>
+      <select id="generation_mode">
+      <option value="hybrid_template">Híbrida: plantilla + agentes</option>
+      <option value="llm_yaml">LLM genera todo el YAML</option>
+      </select>
+
+    <br><br>
+
       <input id="input" style="width:700px" placeholder="deploy nginx with 2 replicas" />
       <button onclick="sendMessage()">Enviar</button>
 
@@ -62,6 +71,7 @@ def home():
         const session_id = document.getElementById("session").value;
         const llm_model = document.getElementById("llm_model").value;
         const output = document.getElementById("output");
+        const generation_mode = document.getElementById("generation_mode").value;
 
         output.textContent = "Ejecutando...";
 
@@ -69,7 +79,7 @@ def home():
           const res = await fetch("/deploy", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({ text, session_id, llm_model })
+            body: JSON.stringify({ text, session_id, llm_model, generation_mode })
           });
 
           const data = await res.json();
@@ -89,6 +99,7 @@ def deploy(request: DeployRequest):
     user_text = request.text
     session_id = request.session_id
     llm_model = request.llm_model
+    generation_mode = request.generation_mode
 
     try:
         start_time = time.time()
@@ -157,6 +168,9 @@ def deploy(request: DeployRequest):
             "source_type": completed.get("source_type", ""),
 
             "llm_model": llm_model,
+
+            "generation_mode": generation_mode,
+            "llm_generated_yaml": "",
         }
 
         final_state = graph.invoke(initial_state)
@@ -233,6 +247,8 @@ def deploy(request: DeployRequest):
             "virtualbox_script": final_state["virtualbox_script"],
             "cluster_inventory": final_state["cluster_inventory"],
             "llm_model": final_state["llm_model"],
+            "generation_mode": final_state["generation_mode"],
+            "llm_generated_yaml": final_state["llm_generated_yaml"],
         }
 
     except Exception as e:

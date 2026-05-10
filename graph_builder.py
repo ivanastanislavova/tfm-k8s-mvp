@@ -31,6 +31,8 @@ from graph_nodes import (
     cluster_execute_node,
     cloud_provision_node,
     build_python_app_node,
+    generate_llm_yaml_node,
+    deploy_llm_yaml_node,
 )
 import state
 # Cada nodo es un "agente" con una responsabilidad concreta
@@ -61,6 +63,8 @@ def build_graph():
     graph.add_node("cluster_execute", cluster_execute_node)  # ejecución del cluster
     graph.add_node("cluster_status", cluster_status_node) # estado del cluster
     graph.add_node("build_python_app", build_python_app_node) # build app from python code
+    graph.add_node("generate_llm_yaml", generate_llm_yaml_node) # generar YAML específico para despliegue desde LLM
+    graph.add_node("deploy_llm_yaml", deploy_llm_yaml_node) # desplegar YAML específico para despliegue desde LLM
     graph.set_entry_point("validate")
     # Siemre se empieza validando → evita errores desde el inicio
 
@@ -75,6 +79,8 @@ def build_graph():
 
         # DEPLOY → generar YAML
         if state["intent"] == "deploy":
+            if state.get("generation_mode") == "llm_yaml":
+                return "generate_llm_yaml"
             return "generate_yaml"
 
         # SCALE → ir directo a escalar (no hace falta YAML)
@@ -152,6 +158,23 @@ def build_graph():
         return "deploy"
 
     graph.add_conditional_edges("generate_yaml", route_after_generate_yaml)
+
+    # =========================
+    # DESPUÉS DE GENERAR YAML CON LLM
+    # =========================
+    def route_after_generate_llm_yaml(state):
+        if state["diagnosis"] != "llm_yaml_ready":
+            return END
+        return "deploy_llm_yaml"
+
+    graph.add_conditional_edges("generate_llm_yaml", route_after_generate_llm_yaml)
+
+    def route_after_deploy_llm_yaml(state):
+        if state["diagnosis"] == "deployment_failed":
+            return END
+        return "observe"
+
+    graph.add_conditional_edges("deploy_llm_yaml", route_after_deploy_llm_yaml)
 
     # =========================
     # DESPUÉS DE DEPLOY
@@ -233,3 +256,6 @@ def build_graph():
 
     return graph.compile()
     # Se compila el grafo → listo para ejecutar
+
+
+    

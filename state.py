@@ -164,3 +164,11 @@ class AgentState(TypedDict):
 
     llm_model: str
     # Modelo LLM a usar para interpretaciones y generación (ej: "llama3.2:3b", "mistral")
+
+    generation_mode: str
+    # Modo de generación:
+    # - "hybrid_template": usa plantilla determinista
+    # - "llm_yaml": el LLM genera todo el YAML
+
+    llm_generated_yaml: str
+    # YAML completo generado directamente por el LLM

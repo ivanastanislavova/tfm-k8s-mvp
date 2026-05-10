@@ -11,7 +11,6 @@ Cada nodo representa una acción del sistema.
 
 import os
 
-
 import time
 # Se usa para esperar unos segundos antes de observar el estado real del clúster.
 # Esto da tiempo a Kubernetes a crear los pods.
@@ -29,6 +28,9 @@ from state import AgentState
 
 from yaml_generator import write_yaml_files
 # Función que genera y guarda los YAMLs (Deployment, Service, ConfigMap, Ingress).
+
+from llm_yaml_generator import generate_yaml_with_llm
+# Función que genera YAMLs usando un LLM (opcional, no determinista).
 
 from cloud_provisioner import provision_infrastructure
 
@@ -789,5 +791,80 @@ def build_python_app_node(state: AgentState):
     state["diagnosis"] = "build_ready"
     state["reason"] = "Python app image built"
     state["history"].append(f"Python Builder: imagen generada {image_name}")
+
+    return state
+
+def generate_llm_yaml_node(state: AgentState):
+    print("\n[AGENT] LLM YAML Generator Agent\n")
+
+    success, yaml_text, message = generate_yaml_with_llm(
+        user_request=state["user_request"],
+        app_name=state["app_name"],
+        image=state["image"],
+        replicas=state["replicas"],
+        port=state["port"],
+        service_type=state["service_type"],
+        llm_model=state.get("llm_model", "llama3.2:3b"),
+    )
+
+    state["llm_generated_yaml"] = yaml_text
+    state["deployment_yaml"] = yaml_text
+    state["observation"] = message
+
+    if not success:
+        state["has_error"] = True
+        state["diagnosis"] = "llm_yaml_invalid"
+        state["reason"] = message
+        state["history"].append("LLM YAML Generator: YAML inválido")
+        return state
+
+    with open("llm_generated.yaml", "w", encoding="utf-8") as f:
+        f.write(yaml_text)
+
+    state["has_error"] = False
+    state["diagnosis"] = "llm_yaml_ready"
+    state["reason"] = "YAML generated completely by LLM"
+    state["history"].append("LLM YAML Generator: YAML generado por IA")
+
+    print("YAML generado completamente por el LLM.\n")
+
+    return state
+
+
+def deploy_llm_yaml_node(state: AgentState):
+    print("\n[AGENT] LLM YAML Execution Agent\n")
+
+    dry_run = subprocess.run(
+        "kubectl apply --dry-run=client -f llm_generated.yaml",
+        shell=True,
+        capture_output=True,
+        text=True
+    )
+
+    if dry_run.returncode != 0:
+        state["has_error"] = True
+        state["diagnosis"] = "llm_yaml_dry_run_failed"
+        state["reason"] = "kubectl dry-run failed"
+        state["observation"] = dry_run.stdout + dry_run.stderr
+        state["history"].append("LLM YAML Execution: dry-run falló")
+        return state
+
+    result = subprocess.run(
+        "kubectl apply -f llm_generated.yaml",
+        shell=True,
+        capture_output=True,
+        text=True
+    )
+
+    state["observation"] = result.stdout + result.stderr
+
+    if result.returncode != 0:
+        state["has_error"] = True
+        state["diagnosis"] = "deployment_failed"
+        state["reason"] = "kubectl apply failed"
+        state["history"].append("LLM YAML Execution: kubectl apply falló")
+    else:
+        state["has_error"] = False
+        state["history"].append("LLM YAML Execution: kubectl apply correcto")
 
     return state
