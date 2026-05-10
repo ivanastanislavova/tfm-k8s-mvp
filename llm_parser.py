@@ -1,5 +1,5 @@
-from langchain_ollama import ChatOllama
-# Conecta con Ollama para usar un modelo local
+from llm_provider import get_llm
+# Aquí definimos el parser híbrido que interpreta el texto del usuario.
 
 from langchain_core.messages import HumanMessage
 # Tipo de mensaje que se le pasa al LLM
@@ -9,17 +9,6 @@ import json
 
 import re
 # Se usa para regex (parseo determinista sin IA)
-
-
-llm = ChatOllama(
-    model="llama3.2:3b",
-    temperature=0
-)
-# Aquí configuramos el modelo que se usará si hace falta IA.
-# - model="llama3.2:3b" → modelo local que corre en Ollama
-# - temperature=0 → comportamiento más estable y menos creativo
-#   (muy importante en tareas de infraestructura)
-
 
 def extract_json(text: str):
     # Algunos LLMs a veces devuelven texto extra antes o después del JSON.
@@ -121,6 +110,29 @@ def rule_based_parse(user_text: str):
             "ingress_host": "",
             "masters": masters,
             "workers": workers
+        }
+
+    # =========================
+    # DEPLOY PYTHON FILE
+    # =========================
+    python_deploy_pattern = re.search(
+        r"(?:deploy|despliega).*(?:python|\.py)\s+([a-zA-Z0-9_\-\.\/\\]+)",
+        text,
+        re.IGNORECASE
+    )
+
+    if python_deploy_pattern:
+        return {
+            "intent": "deploy_python",
+            "app_name": "python-app",
+            "image": "",
+            "replicas": 1,
+            "port": 80,
+            "service_type": "NodePort",
+            "config_data": {},
+            "use_ingress": None,
+            "ingress_host": "",
+            "python_file": python_deploy_pattern.group(1)
         }
 
     # =========================
@@ -476,7 +488,7 @@ def rule_based_parse(user_text: str):
 
 
 
-def llm_parse(user_text: str, context: dict | None = None):
+def llm_parse(user_text: str, context: dict | None = None, llm_model: str = "llama3.2:3b"):
     # SEGUNDA CAPA: parseo con IA
     # Solo se usa si rule_based_parse no ha podido interpretar el texto.
 
@@ -497,7 +509,8 @@ Return ONLY valid JSON with exactly these keys:
   "use_ingress": null,
   "ingress_host": "string",
   "masters": integer,
-  "workers": integer
+  "workers": integer,
+  "python_file": "string"
 }}
 
 Current context:
@@ -521,6 +534,9 @@ User request:
     # Aquí construimos el prompt que le das al LLM.
     # Le pedimos que actúe como parser estructurado, no como chatbot.
     # Muy importante: le obligamos a devolver JSON estricto.
+
+    llm = get_llm(llm_model)
+    # Obtenemos el modelo LLM local usando la función get_llm que definimos en llm_provider.py
 
     response = llm.invoke([HumanMessage(content=prompt)])
     # Llamamos al modelo local
@@ -547,7 +563,7 @@ User request:
         return None
 
 
-def parse_user_input(user_text: str, context: dict | None = None):
+def parse_user_input(user_text: str, context: dict | None = None, llm_model: str = "llama3.2:3b"):
     # Función principal que usa el sistema
     # Estrategia híbrida:
     # 1) primero reglas deterministas
@@ -557,5 +573,5 @@ def parse_user_input(user_text: str, context: dict | None = None):
     if parsed:
         return parsed
 
-    return llm_parse(user_text, context=context)
+    return llm_parse(user_text, context=context, llm_model=llm_model)
 

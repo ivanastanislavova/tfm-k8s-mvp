@@ -29,7 +29,8 @@ from graph_nodes import (
     cluster_plan_node,
     cluster_status_node,
     cluster_execute_node,
-    cloud_provision_node
+    cloud_provision_node,
+    build_python_app_node,
 )
 import state
 # Cada nodo es un "agente" con una responsabilidad concreta
@@ -59,6 +60,7 @@ def build_graph():
     graph.add_node("cloud_provision", cloud_provision_node) # provisión en la nube
     graph.add_node("cluster_execute", cluster_execute_node)  # ejecución del cluster
     graph.add_node("cluster_status", cluster_status_node) # estado del cluster
+    graph.add_node("build_python_app", build_python_app_node) # build app from python code
     graph.set_entry_point("validate")
     # Siemre se empieza validando → evita errores desde el inicio
 
@@ -117,11 +119,25 @@ def build_graph():
         # STATUS DEL CLUSTER → validar salud del cluster
         if state["intent"] == "cluster_status":
             return "cluster_status"
+        
+        # BUILD APP → construir app desde código Python
+        if state["intent"] == "deploy_python":
+            return "build_python_app"
 
         return END
 
     # Esto hace el flujo dinámico → NO es un script fijo
     graph.add_conditional_edges("validate", route_after_validation)
+
+    # =========================
+    # DESPUÉS DE BUILD PYTHON APP
+    # =========================
+    def route_after_build_python_app(state):
+        if state["diagnosis"] == "build_ready":
+            return "generate_yaml"
+        return END
+
+    graph.add_conditional_edges("build_python_app", route_after_build_python_app)
 
     # =========================
     # DESPUÉS DE GENERAR YAML
@@ -188,13 +204,6 @@ def build_graph():
     graph.add_edge("repair", "generate_yaml")
     # Ciclo completo:
     # error → repair → generate_yaml → deploy → observe → diagnose
-
-    # =========================
-    # DESPUÉS DE CLUSTER PLAN
-    # =========================
-    def route_after_cluster_plan(state):
-        # Después de planificar, ejecutar la creación del cluster
-        return "cluster_execute"
     
     graph.add_edge("cluster_plan", "cloud_provision")
     

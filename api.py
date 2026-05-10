@@ -24,6 +24,7 @@ app.add_middleware(
 class DeployRequest(BaseModel):
     text: str
     session_id: str = "default"
+    llm_model: str = "llama3.2:3b"
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -36,16 +37,30 @@ def home():
     </head>
     <body>
       <h2>Chat Kubernetes</h2>
+
+      <label>Session:</label>
       <input id="session" style="width:200px" value="default" placeholder="session_id" />
+
       <br><br>
-      <input id="input" style="width:700px" placeholder="deploy my-web using nginx with 3 replicas on port 8080 as NodePort" />
+
+      <label>LLM:</label>
+      <select id="llm_model">
+        <option value="llama3.2:3b">Llama 3.2 3B</option>
+        <option value="mistral">Mistral 7B</option>
+      </select>
+
+      <br><br>
+
+      <input id="input" style="width:700px" placeholder="deploy nginx with 2 replicas" />
       <button onclick="sendMessage()">Enviar</button>
+
       <pre id="output"></pre>
 
       <script>
       async function sendMessage() {
         const text = document.getElementById("input").value;
         const session_id = document.getElementById("session").value;
+        const llm_model = document.getElementById("llm_model").value;
         const output = document.getElementById("output");
 
         output.textContent = "Ejecutando...";
@@ -54,7 +69,7 @@ def home():
           const res = await fetch("/deploy", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({ text, session_id })
+            body: JSON.stringify({ text, session_id, llm_model })
           });
 
           const data = await res.json();
@@ -73,12 +88,13 @@ def home():
 def deploy(request: DeployRequest):
     user_text = request.text
     session_id = request.session_id
+    llm_model = request.llm_model
 
     try:
         start_time = time.time()
 
         context = conversation_manager.get_context(session_id)
-        parsed = parse_user_input(user_text, context=context)
+        parsed = parse_user_input(user_text, context=context, llm_model=llm_model)
 
         if not parsed:
             return {
@@ -139,6 +155,8 @@ def deploy(request: DeployRequest):
 
             "python_file": completed.get("python_file", ""),
             "source_type": completed.get("source_type", ""),
+
+            "llm_model": llm_model,
         }
 
         final_state = graph.invoke(initial_state)
@@ -213,7 +231,8 @@ def deploy(request: DeployRequest):
             "master_script": final_state["master_script"],
             "worker_script": final_state["worker_script"],
             "virtualbox_script": final_state["virtualbox_script"],
-            "cluster_inventory": final_state["cluster_inventory"]
+            "cluster_inventory": final_state["cluster_inventory"],
+            "llm_model": final_state["llm_model"],
         }
 
     except Exception as e:

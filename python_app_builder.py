@@ -1,4 +1,3 @@
-import os
 import subprocess
 from pathlib import Path
 
@@ -28,7 +27,10 @@ def build_python_app(app_name: str, python_file: str):
         return False, "", f"Python file not found: {python_file}"
 
     target_file = app_dir / "app.py"
-    target_file.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
+    target_file.write_text(
+        source_path.read_text(encoding="utf-8"),
+        encoding="utf-8"
+    )
 
     dockerfile = app_dir / "Dockerfile"
     dockerfile.write_text(
@@ -45,11 +47,20 @@ CMD ["python", "app.py"]
 
     image_name = f"{app_name}:local"
 
-    code, out, err = run_command(
+    build_code, build_out, build_err = run_command(
         f"docker build -t {image_name} {app_dir}"
     )
 
-    if code != 0:
-        return False, "", out + err
+    if build_code != 0:
+        return False, "", build_out + build_err
 
-    return True, image_name, out + err
+    load_code, load_out, load_err = run_command(
+        f"minikube image load {image_name}"
+    )
+
+    if load_code != 0:
+        return False, "", build_out + build_err + "\n" + load_out + load_err
+
+    logs = build_out + build_err + "\n" + load_out + load_err
+
+    return True, image_name, logs

@@ -1,7 +1,7 @@
 import os
 import subprocess
 
-os.environ["KUBECONFIG"] = "C:/tfm-k8s-mvp/config"
+#os.environ["KUBECONFIG"] = "C:/tfm-k8s-mvp/config"
 
 def run_command(command):
     # FUNCIÓN BASE

@@ -767,3 +767,27 @@ def cloud_provision_node(state: AgentState):
         state["history"].append("Cloud Provisioner: fallo al provisionar infraestructura")
 
     return state
+
+def build_python_app_node(state: AgentState):
+    print("\n[AGENT] Python App Builder Agent\n")
+
+    success, image_name, output = build_python_app(
+        state["app_name"],
+        state["python_file"]
+    )
+
+    state["observation"] = output
+
+    if not success:
+        state["has_error"] = True
+        state["diagnosis"] = "build_failed"
+        state["reason"] = "Python app Docker build failed"
+        state["history"].append("Python Builder: build falló")
+        return state
+
+    state["image"] = image_name
+    state["diagnosis"] = "build_ready"
+    state["reason"] = "Python app image built"
+    state["history"].append(f"Python Builder: imagen generada {image_name}")
+
+    return state

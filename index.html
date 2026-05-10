@@ -7,6 +7,14 @@
 
 <h2>Deploy con lenguaje natural</h2>
 
+<label>LLM:</label>
+<select id="llm_model">
+  <option value="llama3.2:3b">Llama 3.2 3B</option>
+  <option value="mistral">Mistral 7B</option>
+</select>
+
+<br><br>
+
 <input id="input" style="width:300px" placeholder="deploy nginx with 2 replicas">
 <button onclick="deploy()">Deploy</button>
 
@@ -15,11 +23,12 @@
 <script>
 async function deploy() {
   const text = document.getElementById("input").value;
+  const llm_model = document.getElementById("llm_model").value;
 
   const res = await fetch("http://127.0.0.1:8000/deploy", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({text})
+    body: JSON.stringify({ text, session_id, llm_model })
   });
 
   const data = await res.json();

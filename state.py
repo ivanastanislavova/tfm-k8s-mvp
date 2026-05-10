@@ -161,3 +161,6 @@ class AgentState(TypedDict):
 
     source_type: str
     # Tipo de fuente del despliegue (ej: "user_request", "generated_code", etc.)
+
+    llm_model: str
+    # Modelo LLM a usar para interpretaciones y generación (ej: "llama3.2:3b", "mistral")
