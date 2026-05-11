@@ -9,6 +9,8 @@ from graph_builder import build_graph
 from llm_parser import parse_user_input
 from conversation_manager import ConversationManager
 
+from metrics import save_evaluation_result
+
 app = FastAPI()
 conversation_manager = ConversationManager()
 
@@ -56,9 +58,10 @@ def home():
       <select id="generation_mode">
       <option value="hybrid_template">Híbrida: plantilla + agentes</option>
       <option value="llm_yaml">LLM genera todo el YAML</option>
+      <option value="full_ai_experimental">Full AI Experimental</option>
       </select>
 
-    <br><br>
+      <br><br>
 
       <input id="input" style="width:700px" placeholder="deploy nginx with 2 replicas" />
       <button onclick="sendMessage()">Enviar</button>
@@ -105,7 +108,9 @@ def deploy(request: DeployRequest):
         start_time = time.time()
 
         context = conversation_manager.get_context(session_id)
+        parse_start = time.time()
         parsed = parse_user_input(user_text, context=context, llm_model=llm_model)
+        interpretation_time = time.time() - parse_start
 
         if not parsed:
             return {
@@ -171,11 +176,17 @@ def deploy(request: DeployRequest):
 
             "generation_mode": generation_mode,
             "llm_generated_yaml": "",
+
+            "metrics": {
+                "interpretation_time_seconds": round(interpretation_time, 4),
+            },
         }
 
         final_state = graph.invoke(initial_state)
 
         execution_time = time.time() - start_time
+
+        save_evaluation_result(final_state, execution_time)
 
         conversation_manager.add_message(session_id, "user", user_text)
         conversation_manager.add_message(
@@ -249,6 +260,7 @@ def deploy(request: DeployRequest):
             "llm_model": final_state["llm_model"],
             "generation_mode": final_state["generation_mode"],
             "llm_generated_yaml": final_state["llm_generated_yaml"],
+            "metrics": final_state["metrics"],
         }
 
     except Exception as e:

@@ -37,6 +37,13 @@ from graph_nodes import (
 import state
 # Cada nodo es un "agente" con una responsabilidad concreta
 
+from diagnose_llm_node import diagnose_llm_node
+# Nodo específico para diagnóstico con LLM → más capacidad de interpretación
+
+from llm_repair_node import repair_llm_node
+# Nodo específico para reparación con LLM → más capacidad de corrección
+
+
 
 def build_graph():
     graph = StateGraph(AgentState)
@@ -54,7 +61,9 @@ def build_graph():
     graph.add_node("status", status_node)            # consulta estado
     graph.add_node("observe", observe_node)          # observa cluster (pods)
     graph.add_node("diagnose", diagnose_node)        # interpreta estado
+    graph.add_node("diagnose_llm", diagnose_llm_node)       # interpreta estado
     graph.add_node("repair", repair_node)            # intenta corregir errores
+    graph.add_node("repair_llm", repair_llm_node)    # intenta corregir errores con LLM
     graph.add_node("show_yaml", show_yaml_node)      # muestra YAML
     graph.add_node("show_logs", show_logs_node)      # logs del pod
     graph.add_node("describe_pod", describe_pod_node)  # describe del pod
@@ -79,10 +88,10 @@ def build_graph():
 
         # DEPLOY → generar YAML
         if state["intent"] == "deploy":
-            if state.get("generation_mode") == "llm_yaml":
+            if state.get("generation_mode") in ["llm_yaml", "full_ai_experimental"]:
                 return "generate_llm_yaml"
             return "generate_yaml"
-
+        
         # SCALE → ir directo a escalar (no hace falta YAML)
         if state["intent"] == "scale":
             return "scale"
@@ -170,8 +179,11 @@ def build_graph():
     graph.add_conditional_edges("generate_llm_yaml", route_after_generate_llm_yaml)
 
     def route_after_deploy_llm_yaml(state):
-        if state["diagnosis"] == "deployment_failed":
+        if state["diagnosis"] in ["deployment_failed", "llm_yaml_dry_run_failed"]:
+            if state.get("generation_mode") == "full_ai_experimental":
+                return "repair_llm"
             return END
+
         return "observe"
 
     graph.add_conditional_edges("deploy_llm_yaml", route_after_deploy_llm_yaml)
@@ -194,32 +206,47 @@ def build_graph():
     # FLUJOS LINEALES
     # =========================
     graph.add_edge("scale", "observe")      # tras escalar → observar
-    graph.add_edge("status", "diagnose")    # status → diagnóstico
-    graph.add_edge("observe", "diagnose")   # observación → diagnóstico
+    graph.add_edge("status", END)         # status es un nodo final → no sigue a nada
+
+    def route_after_observe(state):
+        if state.get("generation_mode") == "full_ai_experimental":
+            return "diagnose_llm"
+
+        return "diagnose"
+
+    graph.add_conditional_edges("observe", route_after_observe)
 
     # =========================
     # CORAZÓN AGENTIC (DIAGNOSIS → ACTION)
     # =========================
     def route_after_diagnose(state):
 
-        # Si el pod sigue arrancando → volver a observar (loop)
         if state["diagnosis"] == "creating":
             return "observe"
 
-        # Si hay error real
-        if state["diagnosis"] in ["image_pull_error", "crash_loop", "unknown"]:
+        if state.get("generation_mode") == "full_ai_experimental":
+            if state["diagnosis"] in [
+                "deployment_failed",
+                "llm_yaml_dry_run_failed",
+                "image_pull_error",
+                "crash_loop",
+                "unknown",
+            ] and state["retries"] < state["max_retries"]:
+                return "repair_llm"
 
-            # Solo reparamos si:
-            # - estamos en deploy
-            # - no hemos superado el límite de intentos
+            return END
+
+        if state["diagnosis"] in ["image_pull_error", "crash_loop", "unknown"]:
             if state["intent"] == "deploy" and state["retries"] < state["max_retries"]:
                 return "repair"
 
-        # Si está todo bien o no se puede reparar → terminar
         return END
 
     # Aquí ocurre el razonamiento adaptativo del sistema
     graph.add_conditional_edges("diagnose", route_after_diagnose)
+
+    # Para el diagnóstico con LLM → mismo corazón agentic pero con más capacidad de interpretación
+    graph.add_conditional_edges("diagnose_llm", route_after_diagnose)
 
     # =========================
     # LOOP DE REMEDIACIÓN
@@ -227,6 +254,10 @@ def build_graph():
     graph.add_edge("repair", "generate_yaml")
     # Ciclo completo:
     # error → repair → generate_yaml → deploy → observe → diagnose
+
+    graph.add_edge("repair_llm", "deploy_llm_yaml")
+    # Ciclo completo para LLM:
+    # error → repair_llm → deploy_llm_yaml → observe → diagnose_llm
     
     graph.add_edge("cluster_plan", "cloud_provision")
     
@@ -256,6 +287,3 @@ def build_graph():
 
     return graph.compile()
     # Se compila el grafo → listo para ejecutar
-
-
-    

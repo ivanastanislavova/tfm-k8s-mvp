@@ -34,6 +34,8 @@ from llm_yaml_generator import generate_yaml_with_llm
 
 from cloud_provisioner import provision_infrastructure
 
+from metrics import timed_node
+
 from k8s_utils import (
     deploy_files,
     get_pods_output,
@@ -72,7 +74,7 @@ def suggest_known_image(image: str):
         return matches[0]
     return None
 
-
+@timed_node("validate")
 def validate_node(state: AgentState):
     print("\n[AGENT] Validator Agent\n")
     # Agente determinista.
@@ -187,7 +189,7 @@ def validate_node(state: AgentState):
     state["history"].append("Validator: validación correcta")
     return state
 
-
+@timed_node("generate_yaml_template")
 def generate_yaml_node(state: AgentState):
     print("\n[AGENT] YAML Generator Agent\n")
     # Agente generador de infraestructura.
@@ -224,7 +226,7 @@ def generate_yaml_node(state: AgentState):
 
     return state
 
-
+@timed_node("deploy_kubectl")
 def deploy_node(state: AgentState):
     print("\n[AGENT] Execution Agent\n")
     # Agente de ejecución.
@@ -247,7 +249,7 @@ def deploy_node(state: AgentState):
 
     return state
 
-
+@timed_node("scale")
 def scale_node(state: AgentState):
     print("\n[AGENT] Scale Agent\n")
     # Agente especializado para escalar una aplicación ya existente.
@@ -268,7 +270,7 @@ def scale_node(state: AgentState):
 
     return state
 
-
+@timed_node("delete")
 def delete_node(state: AgentState):
     print("\n[AGENT] Delete Agent\n")
     # Agente que elimina todos los recursos asociados a la app.
@@ -279,10 +281,9 @@ def delete_node(state: AgentState):
     state["history"].append(f"Delete: recursos de {state['app_name']} eliminados")
     return state
 
-
+@timed_node("status")
 def status_node(state: AgentState):
     print("\n[AGENT] Status Agent\n")
-    # Agente que consulta el estado del deployment.
 
     success, output = get_deployment_status(state["app_name"])
     print(output)
@@ -294,10 +295,27 @@ def status_node(state: AgentState):
         state["has_error"] = True
         state["diagnosis"] = "status_failed"
         state["reason"] = "kubectl get deployment failed"
+        return state
+
+    if "READY" in output and "AVAILABLE" in output:
+        lines = output.strip().splitlines()
+
+        if len(lines) >= 2:
+            parts = lines[1].split()
+            ready = parts[1] if len(parts) > 1 else ""
+
+            state["diagnosis"] = "healthy"
+            state["reason"] = f"Deployment status ready: {ready}"
+            state["has_error"] = False
+            return state
+
+    state["diagnosis"] = "unknown"
+    state["reason"] = "Deployment status could not be interpreted"
+    state["has_error"] = True
 
     return state
 
-
+@timed_node("observe_kubernetes")
 def observe_node(state: AgentState):
     print("\n[AGENT] Monitor Agent\n")
     print("Esperando 8 segundos para observar el estado real...\n")
@@ -331,7 +349,7 @@ def observe_node(state: AgentState):
 
     return state
 
-
+@timed_node("diagnose_deterministic")
 def diagnose_node(state: AgentState):
     print("\n[AGENT] Diagnosis Agent\n")
     # Este agente interpreta lo observado.
@@ -450,7 +468,7 @@ def diagnose_node(state: AgentState):
 
     return state
 
-
+@timed_node("repair_deterministic")
 def repair_node(state: AgentState):
     print("\n[AGENT] Remediation Agent\n")
     # Este es el agente que intenta corregir errores automáticamente.
@@ -541,7 +559,7 @@ def repair_node(state: AgentState):
 
     return state
 
-
+@timed_node("show_yaml")
 def show_yaml_node(state: AgentState):
     print("\n[AGENT] YAML Viewer Agent\n")
     # Agente de visualización.
@@ -567,7 +585,7 @@ def show_yaml_node(state: AgentState):
     state["history"].append("YAML Viewer: YAML mostrado")
     return state
 
-
+@timed_node("show_logs")
 def show_logs_node(state: AgentState):
     print("\n[AGENT] Logs Agent\n")
     # Observabilidad: consulta logs del pod activo
@@ -589,7 +607,7 @@ def show_logs_node(state: AgentState):
 
     return state
 
-
+@timed_node("describe_pod")
 def describe_pod_node(state: AgentState):
     print("\n[AGENT] Describe Agent\n")
     # Observabilidad: describe del pod activo
@@ -611,6 +629,7 @@ def describe_pod_node(state: AgentState):
 
     return state
 
+@timed_node("cluster_plan")
 def cluster_plan_node(state: AgentState):
     print("\n[AGENT] Cluster Provisioning Agent\n")
 
@@ -659,6 +678,7 @@ def cluster_plan_node(state: AgentState):
 
     return state
 
+@timed_node("cluster_status")
 def cluster_status_node(state: AgentState):
     print("\n[AGENT] Cluster Status Agent\n")
 
@@ -697,6 +717,7 @@ def cluster_status_node(state: AgentState):
 
     return state
 
+@timed_node("cluster_execute")
 def cluster_execute_node(state: AgentState):
     print("\n[AGENT] Cluster Execution Agent\n")
 
@@ -733,6 +754,7 @@ def cluster_execute_node(state: AgentState):
 
     return state
 
+@timed_node("cloud_provision")
 def cloud_provision_node(state: AgentState):
     print("\n[AGENT] Cloud Provisioner Agent\n")
 
@@ -770,6 +792,7 @@ def cloud_provision_node(state: AgentState):
 
     return state
 
+@timed_node("build_python_app")
 def build_python_app_node(state: AgentState):
     print("\n[AGENT] Python App Builder Agent\n")
 
@@ -794,6 +817,7 @@ def build_python_app_node(state: AgentState):
 
     return state
 
+@timed_node("generate_yaml_llm")
 def generate_llm_yaml_node(state: AgentState):
     print("\n[AGENT] LLM YAML Generator Agent\n")
 
@@ -830,7 +854,7 @@ def generate_llm_yaml_node(state: AgentState):
 
     return state
 
-
+@timed_node("deploy_llm_yaml")
 def deploy_llm_yaml_node(state: AgentState):
     print("\n[AGENT] LLM YAML Execution Agent\n")
 

@@ -172,3 +172,6 @@ class AgentState(TypedDict):
 
     llm_generated_yaml: str
     # YAML completo generado directamente por el LLM
+
+    metrics: Dict[str, float]
+    # Métricas de tiempo para cada nodo (ej: {"diagnose": 1.23, "repair": 2.34})
