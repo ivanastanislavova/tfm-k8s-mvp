@@ -355,7 +355,6 @@ def observe_node(state: AgentState):
 
     for attempt in range(max_attempts):
         success, output = get_pods_output(state["app_name"])
-        final_success = success
         final_output = output
 
         print(output)
@@ -534,7 +533,9 @@ def repair_node(state: AgentState):
             print(f"Aplicando corrección por similitud: {old_image} -> {candidate}\n")
 
             state["image"] = candidate
-            state["app_name"] = candidate
+
+            if state["app_name"] == old_image:
+                state["app_name"] = candidate
             # Ojo: aquí además cambiamos app_name para mantener coherencia de labels/recursos
 
             delete_app_resources(old_app_name)
