@@ -6,11 +6,14 @@ Define cómo se conectan los agentes.
 Flujo de clúster:
 create_cluster → plan → provision → execute → status
 """
+
 from langgraph.graph import StateGraph, END
+
 # StateGraph = estructura principal de LangGraph (grafo de estados)
 # END = estado final del flujo
 
 from core.state import AgentState
+
 # Estado global compartido entre todos los agentes (clave del sistema)
 
 from agents.graph_nodes import (
@@ -35,12 +38,15 @@ from agents.graph_nodes import (
     deploy_llm_yaml_node,
 )
 import core.state as state
+
 # Cada nodo es un "agente" con una responsabilidad concreta
 
 from agents.diagnose_llm_node import diagnose_llm_node
+
 # Nodo específico para diagnóstico con LLM → más capacidad de interpretación
 
 from agents.llm_repair_node import repair_llm_node
+
 # Nodo específico para reparación con LLM → más capacidad de corrección
 
 
@@ -52,27 +58,33 @@ def build_graph():
     # =========================
     # DEFINICIÓN DE AGENTES
     # =========================
-    graph.add_node("validate", validate_node)        # valida la entrada
+    graph.add_node("validate", validate_node)  # valida la entrada
     graph.add_node("generate_yaml", generate_yaml_node)  # genera manifests
-    graph.add_node("deploy", deploy_node)            # ejecuta kubectl apply
-    graph.add_node("scale", scale_node)              # escala replicas
-    graph.add_node("delete", delete_node)            # elimina recursos
-    graph.add_node("status", status_node)            # consulta estado
-    graph.add_node("observe", observe_node)          # observa cluster (pods)
-    graph.add_node("diagnose", diagnose_node)        # interpreta estado
-    graph.add_node("diagnose_llm", diagnose_llm_node)       # interpreta estado
-    graph.add_node("repair", repair_node)            # intenta corregir errores
-    graph.add_node("repair_llm", repair_llm_node)    # intenta corregir errores con LLM
-    graph.add_node("show_yaml", show_yaml_node)      # muestra YAML
-    graph.add_node("show_logs", show_logs_node)      # logs del pod
+    graph.add_node("deploy", deploy_node)  # ejecuta kubectl apply
+    graph.add_node("scale", scale_node)  # escala replicas
+    graph.add_node("delete", delete_node)  # elimina recursos
+    graph.add_node("status", status_node)  # consulta estado
+    graph.add_node("observe", observe_node)  # observa cluster (pods)
+    graph.add_node("diagnose", diagnose_node)  # interpreta estado
+    graph.add_node("diagnose_llm", diagnose_llm_node)  # interpreta estado
+    graph.add_node("repair", repair_node)  # intenta corregir errores
+    graph.add_node("repair_llm", repair_llm_node)  # intenta corregir errores con LLM
+    graph.add_node("show_yaml", show_yaml_node)  # muestra YAML
+    graph.add_node("show_logs", show_logs_node)  # logs del pod
     graph.add_node("describe_pod", describe_pod_node)  # describe del pod
-    graph.add_node("cluster_plan", cluster_plan_node) # plan de cluster
-    graph.add_node("cloud_provision", cloud_provision_node) # provisión en la nube
+    graph.add_node("cluster_plan", cluster_plan_node)  # plan de cluster
+    graph.add_node("cloud_provision", cloud_provision_node)  # provisión en la nube
     graph.add_node("cluster_execute", cluster_execute_node)  # ejecución del cluster
-    graph.add_node("cluster_status", cluster_status_node) # estado del cluster
-    graph.add_node("build_python_app", build_python_app_node) # build app from python code
-    graph.add_node("generate_llm_yaml", generate_llm_yaml_node) # generar YAML específico para despliegue desde LLM
-    graph.add_node("deploy_llm_yaml", deploy_llm_yaml_node) # desplegar YAML específico para despliegue desde LLM
+    graph.add_node("cluster_status", cluster_status_node)  # estado del cluster
+    graph.add_node(
+        "build_python_app", build_python_app_node
+    )  # build app from python code
+    graph.add_node(
+        "generate_llm_yaml", generate_llm_yaml_node
+    )  # generar YAML específico para despliegue desde LLM
+    graph.add_node(
+        "deploy_llm_yaml", deploy_llm_yaml_node
+    )  # desplegar YAML específico para despliegue desde LLM
     graph.set_entry_point("validate")
     # Siemre se empieza validando → evita errores desde el inicio
 
@@ -87,10 +99,10 @@ def build_graph():
 
         # DEPLOY → generar YAML
         if state["intent"] == "deploy":
-            if state.get("generation_mode") in ["llm_yaml", "full_ai_experimental"]:
+            if state.get("generation_mode") == "full_ai_experimental":
                 return "generate_llm_yaml"
             return "generate_yaml"
-        
+
         # SCALE → ir directo a escalar (no hace falta YAML)
         if state["intent"] == "scale":
             return "scale"
@@ -125,15 +137,15 @@ def build_graph():
 
         if state["intent"] == "describe_pod":
             return "describe_pod"
-        
+
         # PLAN DE CLUSTER → ir directo a planificar (sin pasar por YAML)
         if state["intent"] == "create_cluster":
             return "cluster_plan"
-        
+
         # STATUS DEL CLUSTER → validar salud del cluster
         if state["intent"] == "cluster_status":
             return "cluster_status"
-        
+
         # BUILD APP → construir app desde código Python
         if state["intent"] == "deploy_python":
             return "build_python_app"
@@ -204,8 +216,8 @@ def build_graph():
     # =========================
     # FLUJOS LINEALES
     # =========================
-    graph.add_edge("scale", "observe")      # tras escalar → observar
-    graph.add_edge("status", END)         # status es un nodo final → no sigue a nada
+    graph.add_edge("scale", "observe")  # tras escalar → observar
+    graph.add_edge("status", END)  # status es un nodo final → no sigue a nada
 
     def route_after_observe(state):
         if state.get("generation_mode") == "full_ai_experimental":
@@ -224,13 +236,17 @@ def build_graph():
             return "observe"
 
         if state.get("generation_mode") == "full_ai_experimental":
-            if state["diagnosis"] in [
-                "deployment_failed",
-                "llm_yaml_dry_run_failed",
-                "image_pull_error",
-                "crash_loop",
-                "unknown",
-            ] and state["retries"] < state["max_retries"]:
+            if (
+                state["diagnosis"]
+                in [
+                    "deployment_failed",
+                    "llm_yaml_dry_run_failed",
+                    "image_pull_error",
+                    "crash_loop",
+                    "unknown",
+                ]
+                and state["retries"] < state["max_retries"]
+            ):
                 return "repair_llm"
 
             return END
@@ -257,9 +273,9 @@ def build_graph():
     graph.add_edge("repair_llm", "deploy_llm_yaml")
     # Ciclo completo para LLM:
     # error → repair_llm → deploy_llm_yaml → observe → diagnose_llm
-    
+
     graph.add_edge("cluster_plan", "cloud_provision")
-    
+
     def route_after_cloud_provision(state):
         if state["diagnosis"] != "infrastructure_ready":
             return END
@@ -270,7 +286,7 @@ def build_graph():
         return "cluster_execute"
 
     graph.add_conditional_edges("cloud_provision", route_after_cloud_provision)
-    
+
     def route_after_cluster_execute(state):
         if state["diagnosis"] == "cluster_created":
             return "cluster_status"
@@ -281,7 +297,7 @@ def build_graph():
     # =========================
     # SALIDAS FINALES
     # =========================
-    
+
     graph.add_edge("cluster_status", END)
 
     return graph.compile()

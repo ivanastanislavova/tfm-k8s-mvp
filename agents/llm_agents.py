@@ -3,11 +3,7 @@ from langchain_core.messages import HumanMessage
 import json
 import re
 
-
-llm = ChatOllama(
-    model="llama3.2:3b",
-    temperature=0
-)
+llm = ChatOllama(model="llama3.2:3b", temperature=0)
 
 
 def extract_json(text: str):

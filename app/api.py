@@ -57,8 +57,7 @@ def home():
       <label>Versión:</label>
       <select id="generation_mode">
       <option value="hybrid_template">Híbrida: plantilla + agentes</option>
-      <option value="llm_yaml">LLM genera todo el YAML</option>
-      <option value="full_ai_experimental">Full AI Experimental</option>
+      <option value="full_ai_experimental">Full AI: YAML + diagnóstico + reparación con IA</option>
       </select>
 
       <br><br>
@@ -116,7 +115,7 @@ def deploy(request: DeployRequest):
             return {
                 "error": "No se pudo interpretar la petición",
                 "input": user_text,
-                "session_id": session_id
+                "session_id": session_id,
             }
 
         completed = conversation_manager.fill_missing_from_context(session_id, parsed)
@@ -127,56 +126,42 @@ def deploy(request: DeployRequest):
             "session_id": session_id,
             "user_request": user_text,
             "intent": completed["intent"],
-
             "app_name": completed["app_name"],
             "image": completed["image"],
             "replicas": completed["replicas"],
             "port": completed["port"],
             "service_type": completed["service_type"],
             "config_data": completed["config_data"],
-
             "use_ingress": completed["use_ingress"],
             "ingress_host": completed["ingress_host"],
-
             "masters": completed.get("masters", 1),
             "workers": completed.get("workers", 1),
-
             "provider": completed.get("provider", "minikube"),
-
             "has_error": False,
             "diagnosis": "",
             "reason": "",
-
             "deployment_yaml": "",
             "service_yaml": "",
             "configmap_yaml": "",
             "ingress_yaml": "",
-
             "observation": "",
             "logs_output": "",
             "describe_output": "",
-
             "history": [],
             "chat_history": conversation_manager.get_messages(session_id),
-
             "retries": 0,
             "max_retries": 2,
-
             "cluster_plan": "",
             "master_script": "",
             "worker_script": "",
             "virtualbox_script": "",
             "cluster_inventory": {},
             "cluster_inventory_path": "",
-
             "python_file": completed.get("python_file", ""),
             "source_type": completed.get("source_type", ""),
-
             "llm_model": llm_model,
-
             "generation_mode": generation_mode,
             "llm_generated_yaml": "",
-
             "metrics": {
                 "interpretation_time_seconds": round(interpretation_time, 4),
             },
@@ -192,7 +177,7 @@ def deploy(request: DeployRequest):
         conversation_manager.add_message(
             session_id,
             "assistant",
-            f"{final_state['diagnosis']}: {final_state['reason']}"
+            f"{final_state['diagnosis']}: {final_state['reason']}",
         )
 
         # Actualizar contexto si la acción modifica o mantiene el despliegue
@@ -220,7 +205,7 @@ def deploy(request: DeployRequest):
                 "use_ingress": False,
                 "ingress_host": "",
                 "masters": 1,
-                "workers": 1
+                "workers": 1,
             }
 
             final_state["app_name"] = ""
@@ -268,5 +253,5 @@ def deploy(request: DeployRequest):
             "error": "Backend exception",
             "details": str(e),
             "input": user_text,
-            "session_id": session_id
+            "session_id": session_id,
         }

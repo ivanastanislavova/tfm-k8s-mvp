@@ -11,6 +11,7 @@ Base del comportamiento agentic.
 
 from typing import TypedDict, List, Dict
 
+
 # Definimos la estructura global del estado compartido entre todos los agentes
 # Este estado es el "cerebro compartido" del sistema (LangGraph)
 class AgentState(TypedDict):
@@ -19,35 +20,35 @@ class AgentState(TypedDict):
     # CONTEXTO DE ENTRADA
     # =========================
 
-    session_id: str  
+    session_id: str
     # Identificador de la conversación (permite múltiples sesiones tipo chat)
 
-    user_request: str  
+    user_request: str
     # Texto original del usuario (ej: "deploy nginx with 2 replicas")
 
-    intent: str  
+    intent: str
     # Intención detectada (deploy, scale, update_image, etc.)
 
     # =========================
     # CONFIGURACIÓN DEL DESPLIEGUE
     # =========================
 
-    app_name: str  
+    app_name: str
     # Nombre de la aplicación (también usado como label en Kubernetes)
 
-    image: str  
+    image: str
     # Imagen Docker a usar (ej: nginx, nginx:latest)
 
-    replicas: int  
+    replicas: int
     # Número de réplicas (pods)
 
-    port: int  
+    port: int
     # Puerto del contenedor
 
-    service_type: str  
+    service_type: str
     # Tipo de servicio Kubernetes (NodePort o ClusterIP)
 
-    config_data: Dict[str, str]  
+    config_data: Dict[str, str]
     # Variables de configuración tipo ENV (para ConfigMap)
     # Ej: {"ENV": "prod", "DEBUG": "false"}
 
@@ -55,10 +56,10 @@ class AgentState(TypedDict):
     # EXPOSICIÓN (INGRESS)
     # =========================
 
-    use_ingress: bool  
+    use_ingress: bool
     # Indica si se debe crear un Ingress o no
 
-    ingress_host: str  
+    ingress_host: str
     # Dominio para el Ingress (ej: myapp.local)
 
     masters: int
@@ -71,53 +72,53 @@ class AgentState(TypedDict):
     # ESTADO Y DIAGNÓSTICO
     # =========================
 
-    has_error: bool  
+    has_error: bool
     # Flag rápido para saber si hay error en el sistema
 
-    diagnosis: str  
+    diagnosis: str
     # Tipo de diagnóstico (ej: "healthy", "image_pull_error")
 
-    reason: str  
+    reason: str
     # Explicación del diagnóstico (ej: "pods running", "image pull failed")
 
     # =========================
     # YAML GENERADO
     # =========================
 
-    deployment_yaml: str  
+    deployment_yaml: str
     # YAML del Deployment generado dinámicamente
 
-    service_yaml: str  
+    service_yaml: str
     # YAML del Service
 
-    configmap_yaml: str  
+    configmap_yaml: str
     # YAML del ConfigMap (si hay config_data)
 
-    ingress_yaml: str  
+    ingress_yaml: str
     # YAML del Ingress (si use_ingress=True)
 
     # =========================
     # OBSERVABILIDAD
     # =========================
 
-    observation: str  
+    observation: str
     # Output de kubectl get pods (estado de los pods)
 
-    logs_output: str  
+    logs_output: str
     # Logs del pod (kubectl logs)
 
-    describe_output: str  
+    describe_output: str
     # Describe del pod (kubectl describe)
 
     # =========================
     # MEMORIA DEL SISTEMA
     # =========================
 
-    history: List[str]  
+    history: List[str]
     # Historial técnico de lo que han hecho los agentes
     # Ej: ["Validator OK", "Execution OK", "Diagnosis healthy"]
 
-    chat_history: List[Dict[str, str]]  
+    chat_history: List[Dict[str, str]]
     # Historial conversacional (para contexto tipo ChatGPT)
     # Ej: [{"role": "user", "content": "..."}]
 
@@ -125,10 +126,10 @@ class AgentState(TypedDict):
     # CONTROL DE RETRIES
     # =========================
 
-    retries: int  
+    retries: int
     # Número de intentos de remediación realizados
 
-    max_retries: int  
+    max_retries: int
     # Límite máximo de intentos (evita bucles infinitos)
 
     # =========================
@@ -167,8 +168,8 @@ class AgentState(TypedDict):
 
     generation_mode: str
     # Modo de generación:
-    # - "hybrid_template": usa plantilla determinista
-    # - "llm_yaml": el LLM genera todo el YAML
+    # - "hybrid_template": usa plantilla determinista y diagnóstico principalmente determinista
+    # - "full_ai_experimental": usa LLM para generar YAML, diagnosticar y reparar
 
     llm_generated_yaml: str
     # YAML completo generado directamente por el LLM

@@ -61,13 +61,19 @@ Rules:
         docs = list(yaml.safe_load_all(repaired_yaml))
 
         if len(docs) < 2:
-            return _fail(state, repaired_yaml, "Repaired YAML must contain Deployment and Service")
+            return _fail(
+                state,
+                repaired_yaml,
+                "Repaired YAML must contain Deployment and Service",
+            )
 
         deployment = docs[0]
         containers = deployment["spec"]["template"]["spec"]["containers"]
 
         if "ports" not in containers[0]:
-            return _fail(state, repaired_yaml, "Repaired YAML missing container ports section")
+            return _fail(
+                state, repaired_yaml, "Repaired YAML missing container ports section"
+            )
 
     except Exception as e:
         return _fail(state, repaired_yaml, f"Invalid repaired YAML: {e}")

@@ -1,14 +1,19 @@
 from llm.llm_provider import get_llm
+
 # Aquí definimos el parser híbrido que interpreta el texto del usuario.
 
 from langchain_core.messages import HumanMessage
+
 # Tipo de mensaje que se le pasa al LLM
 
 import json
+
 # Se usa para convertir texto JSON en diccionarios Python
 
 import re
+
 # Se usa para regex (parseo determinista sin IA)
+
 
 def extract_json(text: str):
     # Algunos LLMs a veces devuelven texto extra antes o después del JSON.
@@ -22,7 +27,7 @@ def extract_json(text: str):
 def normalize_service_type(text: str):
     # Normaliza service_type para que siempre quede
     # exactamente como Kubernetes espera:
-    # "NodePort" expone el servicio externamente abriendo un puerto especifico 
+    # "NodePort" expone el servicio externamente abriendo un puerto especifico
     # o "ClusterIP" expone el servicio solo internamente dentro del cluster
 
     if not text:
@@ -63,13 +68,13 @@ def rule_based_parse(user_text: str):
 
     text = user_text.strip()
 
-        # =========================
+    # =========================
     # CLUSTER STATUS / HEALTH
     # =========================
     cluster_status_pattern = re.search(
         r"(?:check|show|get|validate).*(?:cluster).*(?:health|status|nodes|state)|(?:cluster)\s+(?:health|status|nodes|state)",
         text,
-        re.IGNORECASE
+        re.IGNORECASE,
     )
 
     if cluster_status_pattern:
@@ -82,7 +87,7 @@ def rule_based_parse(user_text: str):
             "service_type": "",
             "config_data": {},
             "use_ingress": None,
-            "ingress_host": ""
+            "ingress_host": "",
         }
 
     # =========================
@@ -91,13 +96,21 @@ def rule_based_parse(user_text: str):
     create_cluster_pattern = re.search(
         r"(?:create|setup|install|provision).*(?:kubernetes|k8s).*(?:cluster)(?:\s+with\s+(\d+)\s+master(?:s)?\s+and\s+(\d+)\s+worker(?:s)?)?",
         text,
-        re.IGNORECASE
+        re.IGNORECASE,
     )
 
     if create_cluster_pattern:
-        masters = int(create_cluster_pattern.group(1)) if create_cluster_pattern.group(1) else 1
-        workers = int(create_cluster_pattern.group(2)) if create_cluster_pattern.group(2) else 1
-        
+        masters = (
+            int(create_cluster_pattern.group(1))
+            if create_cluster_pattern.group(1)
+            else 1
+        )
+        workers = (
+            int(create_cluster_pattern.group(2))
+            if create_cluster_pattern.group(2)
+            else 1
+        )
+
         return {
             "intent": "create_cluster",
             "app_name": "cluster",
@@ -109,7 +122,7 @@ def rule_based_parse(user_text: str):
             "use_ingress": None,
             "ingress_host": "",
             "masters": masters,
-            "workers": workers
+            "workers": workers,
         }
 
     # =========================
@@ -118,7 +131,7 @@ def rule_based_parse(user_text: str):
     python_deploy_pattern = re.search(
         r"(?:deploy|despliega).*(?:python|\.py)\s+([a-zA-Z0-9_\-\.\/\\]+)",
         text,
-        re.IGNORECASE
+        re.IGNORECASE,
     )
 
     if python_deploy_pattern:
@@ -132,7 +145,7 @@ def rule_based_parse(user_text: str):
             "config_data": {},
             "use_ingress": None,
             "ingress_host": "",
-            "python_file": python_deploy_pattern.group(1)
+            "python_file": python_deploy_pattern.group(1),
         }
 
     # =========================
@@ -147,7 +160,7 @@ def rule_based_parse(user_text: str):
         r"(?:\s+with\s+config\s+([A-Za-z0-9_\-=,\.\:]+))?"
         r"(?:\s+with\s+ingress(?:\s+host\s+([a-zA-Z0-9\.\-]+))?)?",
         text,
-        re.IGNORECASE
+        re.IGNORECASE,
     )
     # Esta regex intenta capturar una frase tipo:
     # deploy my-web using nginx with 3 replicas on port 8080 as NodePort with config ENV=prod,DEBUG=false with ingress host myweb.local
@@ -165,7 +178,11 @@ def rule_based_parse(user_text: str):
         port = int(deploy_pattern.group(4)) if deploy_pattern.group(4) else 80
         # Si no especifica puerto, se usa 80
 
-        service_type = normalize_service_type(deploy_pattern.group(5)) if deploy_pattern.group(5) else "NodePort"
+        service_type = (
+            normalize_service_type(deploy_pattern.group(5))
+            if deploy_pattern.group(5)
+            else "NodePort"
+        )
         # Si no especifica tipo de servicio, se usa NodePort por defecto
 
         config_data = parse_config_data(deploy_pattern.group(6))
@@ -186,16 +203,14 @@ def rule_based_parse(user_text: str):
             "service_type": service_type,
             "config_data": config_data,
             "use_ingress": use_ingress,
-            "ingress_host": ingress_host
+            "ingress_host": ingress_host,
         }
 
     # =========================
     # SCALE explícito
     # =========================
     scale_explicit_pattern = re.search(
-        r"scale\s+([a-zA-Z0-9\-]+)\s+to\s+(\d+)\s+replicas?",
-        text,
-        re.IGNORECASE
+        r"scale\s+([a-zA-Z0-9\-]+)\s+to\s+(\d+)\s+replicas?", text, re.IGNORECASE
     )
     # Captura frases como:
     # scale my-web to 5 replicas
@@ -210,16 +225,14 @@ def rule_based_parse(user_text: str):
             "service_type": "",
             "config_data": {},
             "use_ingress": None,
-            "ingress_host": ""
+            "ingress_host": "",
         }
 
     # =========================
     # SCALE contextual
     # =========================
     scale_contextual_pattern = re.search(
-        r"pon\s+(\d+)\s+replicas?",
-        text,
-        re.IGNORECASE
+        r"pon\s+(\d+)\s+replicas?", text, re.IGNORECASE
     )
     # Captura frases cortas tipo:
     # pon 3 replicas
@@ -235,7 +248,7 @@ def rule_based_parse(user_text: str):
             "service_type": "",
             "config_data": {},
             "use_ingress": None,
-            "ingress_host": ""
+            "ingress_host": "",
         }
 
     # =========================
@@ -244,7 +257,7 @@ def rule_based_parse(user_text: str):
     update_image_pattern = re.search(
         r"(?:change|cambia)\s+(?:(?:the|la)\s+)?(?:image|imagen)\s+(?:to|a)\s+([a-zA-Z0-9\:\._\-\/]+)",
         text,
-        re.IGNORECASE
+        re.IGNORECASE,
     )
     # Captura:
     # change image to nginx:latest
@@ -260,16 +273,14 @@ def rule_based_parse(user_text: str):
             "service_type": "",
             "config_data": {},
             "use_ingress": None,
-            "ingress_host": ""
+            "ingress_host": "",
         }
 
     # =========================
     # UPDATE PORT
     # =========================
     update_port_pattern = re.search(
-        r"(?:change|cambia).*(?:port|puerto)\s+(?:to\s+)?(\d+)",
-        text,
-        re.IGNORECASE
+        r"(?:change|cambia).*(?:port|puerto)\s+(?:to\s+)?(\d+)", text, re.IGNORECASE
     )
 
     if update_port_pattern:
@@ -282,16 +293,14 @@ def rule_based_parse(user_text: str):
             "service_type": "",
             "config_data": {},
             "use_ingress": None,
-            "ingress_host": ""
+            "ingress_host": "",
         }
 
     # =========================
     # UPDATE SERVICE TYPE
     # =========================
     update_service_pattern = re.search(
-        r"(?:make|hazlo|set).*(ClusterIP|NodePort)",
-        text,
-        re.IGNORECASE
+        r"(?:make|hazlo|set).*(ClusterIP|NodePort)", text, re.IGNORECASE
     )
 
     if update_service_pattern:
@@ -304,16 +313,14 @@ def rule_based_parse(user_text: str):
             "service_type": normalize_service_type(update_service_pattern.group(1)),
             "config_data": {},
             "use_ingress": None,
-            "ingress_host": ""
+            "ingress_host": "",
         }
 
     # =========================
     # ADD CONFIG
     # =========================
     add_config_pattern = re.search(
-        r"(?:add|añade)\s+config\s+([A-Za-z0-9_\-=,\.\:]+)",
-        text,
-        re.IGNORECASE
+        r"(?:add|añade)\s+config\s+([A-Za-z0-9_\-=,\.\:]+)", text, re.IGNORECASE
     )
 
     if add_config_pattern:
@@ -326,7 +333,7 @@ def rule_based_parse(user_text: str):
             "service_type": "",
             "config_data": parse_config_data(add_config_pattern.group(1)),
             "use_ingress": None,
-            "ingress_host": ""
+            "ingress_host": "",
         }
 
     # =========================
@@ -335,7 +342,7 @@ def rule_based_parse(user_text: str):
     ingress_pattern = re.search(
         r"(?:enable|add|with)\s+ingress(?:\s+host\s+([a-zA-Z0-9\.\-]+))?",
         text,
-        re.IGNORECASE
+        re.IGNORECASE,
     )
 
     if ingress_pattern:
@@ -348,16 +355,16 @@ def rule_based_parse(user_text: str):
             "service_type": "",
             "config_data": {},
             "use_ingress": True,
-            "ingress_host": ingress_pattern.group(1) if ingress_pattern.group(1) else ""
+            "ingress_host": (
+                ingress_pattern.group(1) if ingress_pattern.group(1) else ""
+            ),
         }
 
     # =========================
     # DISABLE INGRESS
     # =========================
     disable_ingress_pattern = re.search(
-        r"(?:disable|remove|delete)\s+ingress",
-        text,
-        re.IGNORECASE
+        r"(?:disable|remove|delete)\s+ingress", text, re.IGNORECASE
     )
 
     if disable_ingress_pattern:
@@ -370,7 +377,7 @@ def rule_based_parse(user_text: str):
             "service_type": "",
             "config_data": {},
             "use_ingress": False,
-            "ingress_host": ""
+            "ingress_host": "",
         }
 
     # =========================
@@ -379,7 +386,7 @@ def rule_based_parse(user_text: str):
     delete_pattern = re.search(
         r"(?:delete|elim[ií]nalo|b[oó]rralo|remove)\s*([a-zA-Z0-9\-]+)?",
         text,
-        re.IGNORECASE
+        re.IGNORECASE,
     )
 
     if delete_pattern:
@@ -392,7 +399,7 @@ def rule_based_parse(user_text: str):
             "service_type": "",
             "config_data": {},
             "use_ingress": None,
-            "ingress_host": ""
+            "ingress_host": "",
         }
 
     # =========================
@@ -401,7 +408,7 @@ def rule_based_parse(user_text: str):
     status_pattern = re.search(
         r"(?:status\s+of|status|show status|mu[eé]strame el estado)\s*([a-zA-Z0-9\-]+)?",
         text,
-        re.IGNORECASE
+        re.IGNORECASE,
     )
 
     if status_pattern:
@@ -414,16 +421,14 @@ def rule_based_parse(user_text: str):
             "service_type": "",
             "config_data": {},
             "use_ingress": None,
-            "ingress_host": ""
+            "ingress_host": "",
         }
 
     # =========================
     # SHOW YAML
     # =========================
     show_yaml_pattern = re.search(
-        r"(?:show yaml|show me the yaml|ens[eé][ñn]ame el yaml)",
-        text,
-        re.IGNORECASE
+        r"(?:show yaml|show me the yaml|ens[eé][ñn]ame el yaml)", text, re.IGNORECASE
     )
 
     if show_yaml_pattern:
@@ -436,7 +441,7 @@ def rule_based_parse(user_text: str):
             "service_type": "",
             "config_data": {},
             "use_ingress": None,
-            "ingress_host": ""
+            "ingress_host": "",
         }
 
     # =========================
@@ -445,20 +450,22 @@ def rule_based_parse(user_text: str):
     show_logs_pattern = re.search(
         r"(?:show logs|show me the logs|ens[eé][ñn]ame los logs|logs)\s*([a-zA-Z0-9\-]+)?",
         text,
-        re.IGNORECASE
+        re.IGNORECASE,
     )
 
     if show_logs_pattern:
         return {
             "intent": "show_logs",
-            "app_name": show_logs_pattern.group(1) if show_logs_pattern.group(1) else "",
+            "app_name": (
+                show_logs_pattern.group(1) if show_logs_pattern.group(1) else ""
+            ),
             "image": "",
             "replicas": 0,
             "port": 0,
             "service_type": "",
             "config_data": {},
             "use_ingress": None,
-            "ingress_host": ""
+            "ingress_host": "",
         }
 
     # =========================
@@ -467,7 +474,7 @@ def rule_based_parse(user_text: str):
     describe_pattern = re.search(
         r"(?:describe pod|describe|ens[eé][ñn]ame el describe)\s*([a-zA-Z0-9\-]+)?",
         text,
-        re.IGNORECASE
+        re.IGNORECASE,
     )
 
     if describe_pattern:
@@ -480,15 +487,16 @@ def rule_based_parse(user_text: str):
             "service_type": "",
             "config_data": {},
             "use_ingress": None,
-            "ingress_host": ""
+            "ingress_host": "",
         }
 
     # Si ninguna regex encaja, no se pudo interpretar por reglas
     return None
 
 
-
-def llm_parse(user_text: str, context: dict | None = None, llm_model: str = "llama3.2:3b"):
+def llm_parse(
+    user_text: str, context: dict | None = None, llm_model: str = "llama3.2:3b"
+):
     # SEGUNDA CAPA: parseo con IA
     # Solo se usa si rule_based_parse no ha podido interpretar el texto.
 
@@ -563,7 +571,9 @@ User request:
         return None
 
 
-def parse_user_input(user_text: str, context: dict | None = None, llm_model: str = "llama3.2:3b"):
+def parse_user_input(
+    user_text: str, context: dict | None = None, llm_model: str = "llama3.2:3b"
+):
     # Función principal que usa el sistema
     # Estrategia híbrida:
     # 1) primero reglas deterministas
@@ -574,4 +584,3 @@ def parse_user_input(user_text: str, context: dict | None = None, llm_model: str
         return parsed
 
     return llm_parse(user_text, context=context, llm_model=llm_model)
-

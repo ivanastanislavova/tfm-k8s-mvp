@@ -10,7 +10,6 @@ import json
 import os
 import subprocess
 
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TERRAFORM_DIR = os.path.join(BASE_DIR, "terraform")
 GENERATED_DIR = os.path.join(BASE_DIR, "generated_cluster")
@@ -18,11 +17,7 @@ GENERATED_DIR = os.path.join(BASE_DIR, "generated_cluster")
 
 def run_command(command, cwd=None):
     result = subprocess.run(
-        command,
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        shell=True
+        command, cwd=cwd, capture_output=True, text=True, shell=True
     )
     return result.returncode, result.stdout, result.stderr
 
@@ -34,7 +29,7 @@ def provision_oracle_infrastructure(params: dict):
     for cmd in [
         "terraform init",
         "terraform apply -auto-approve",
-        "terraform output -json"
+        "terraform output -json",
     ]:
         code, out, err = run_command(cmd, cwd=TERRAFORM_DIR)
         logs.append(f"=== {cmd} ===")
@@ -47,13 +42,8 @@ def provision_oracle_infrastructure(params: dict):
 
     inventory = {
         "ssh_user": outputs.get("ssh_user", {}).get("value", "ubuntu"),
-        "master": {
-            "host": outputs["master_public_ip"]["value"]
-        },
-        "workers": [
-            {"host": ip}
-            for ip in outputs["worker_public_ips"]["value"]
-        ]
+        "master": {"host": outputs["master_public_ip"]["value"]},
+        "workers": [{"host": ip} for ip in outputs["worker_public_ips"]["value"]],
     }
 
     inventory_path = os.path.join(GENERATED_DIR, "inventory.json")
@@ -83,10 +73,8 @@ def provision_minikube_infrastructure(params: dict):
         "provider": "minikube",
         "cluster": "local",
         "ssh_user": "",
-        "master": {
-            "host": "minikube"
-        },
-        "workers": []
+        "master": {"host": "minikube"},
+        "workers": [],
     }
 
     inventory_path = os.path.join(GENERATED_DIR, "inventory.json")

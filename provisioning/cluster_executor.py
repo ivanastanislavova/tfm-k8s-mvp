@@ -7,6 +7,7 @@ Ejecuta la instalación real de Kubernetes.
 
 Convierte el plan en un clúster real.
 """
+
 import json
 import os
 import re
@@ -19,12 +20,7 @@ def load_inventory(path="cluster_inventory.json"):
 
 
 def run_local_command(command):
-    result = subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-        shell=True
-    )
+    result = subprocess.run(command, capture_output=True, text=True, shell=True)
     return result.returncode, result.stdout, result.stderr
 
 
@@ -39,10 +35,7 @@ def run_remote_script(user, host, remote_path):
 
 
 def extract_join_command(output):
-    match = re.search(
-        r"kubeadm join\s+[^\n]+(?:\n\s+--[^\n]+)*",
-        output
-    )
+    match = re.search(r"kubeadm join\s+[^\n]+(?:\n\s+--[^\n]+)*", output)
 
     if not match:
         return ""
@@ -53,7 +46,7 @@ def extract_join_command(output):
 def execute_cluster_provisioning(inventory_path=None):
     if inventory_path is None:
         inventory_path = "cluster_inventory.json"
-    
+
     inventory = load_inventory(inventory_path)
 
     ssh_user = inventory["ssh_user"]
@@ -68,10 +61,7 @@ def execute_cluster_provisioning(inventory_path=None):
 
     logs.append(f"Copying master script to {master_host}")
     copy_code, copy_out, copy_err = copy_script_to_host(
-        master_script,
-        ssh_user,
-        master_host,
-        "/tmp/master_setup.sh"
+        master_script, ssh_user, master_host, "/tmp/master_setup.sh"
     )
     logs.append(copy_out + copy_err)
 
@@ -80,9 +70,7 @@ def execute_cluster_provisioning(inventory_path=None):
 
     logs.append(f"Executing master script on {master_host}")
     master_code, master_out, master_err = run_remote_script(
-        ssh_user,
-        master_host,
-        "/tmp/master_setup.sh"
+        ssh_user, master_host, "/tmp/master_setup.sh"
     )
     logs.append(master_out + master_err)
 
@@ -102,10 +90,7 @@ def execute_cluster_provisioning(inventory_path=None):
 
         logs.append(f"Copying worker script to {worker_host}")
         copy_code, copy_out, copy_err = copy_script_to_host(
-            worker_script,
-            ssh_user,
-            worker_host,
-            "/tmp/worker_setup.sh"
+            worker_script, ssh_user, worker_host, "/tmp/worker_setup.sh"
         )
         logs.append(copy_out + copy_err)
 
@@ -113,7 +98,7 @@ def execute_cluster_provisioning(inventory_path=None):
             return False, "\n".join(logs), join_command
 
         remote_command = (
-            f'ssh {ssh_user}@{worker_host} '
+            f"ssh {ssh_user}@{worker_host} "
             f'"chmod +x /tmp/worker_setup.sh && /tmp/worker_setup.sh && sudo {join_command}"'
         )
 

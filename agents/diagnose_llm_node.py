@@ -35,9 +35,7 @@ Rules:
 - Do not explain.
 """
 
-    response = llm.invoke([
-        HumanMessage(content=prompt)
-    ])
+    response = llm.invoke([HumanMessage(content=prompt)])
 
     diagnosis = response.content.strip().lower()
 
@@ -78,8 +76,6 @@ Rules:
         state["reason"] = "LLM uncertain"
         state["has_error"] = True
 
-    state["history"].append(
-        f"LLM Diagnosis: {diagnosis}"
-    )
+    state["history"].append(f"LLM Diagnosis: {diagnosis}")
 
     return state

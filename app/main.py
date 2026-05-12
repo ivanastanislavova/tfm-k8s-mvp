@@ -28,48 +28,37 @@ if __name__ == "__main__":
             "session_id": session_id,
             "user_request": user_text,
             "intent": completed["intent"],
-
             "app_name": completed["app_name"],
             "image": completed["image"],
             "replicas": completed["replicas"],
             "port": completed["port"],
             "service_type": completed["service_type"],
             "config_data": completed["config_data"],
-
             "use_ingress": completed["use_ingress"],
             "ingress_host": completed["ingress_host"],
-
             "masters": completed.get("masters", 1),
             "workers": completed.get("workers", 1),
-
             "provider": completed.get("provider", "minikube"),
-
             "has_error": False,
             "diagnosis": "",
             "reason": "",
-
             "deployment_yaml": "",
             "service_yaml": "",
             "configmap_yaml": "",
             "ingress_yaml": "",
-
             "observation": "",
             "logs_output": "",
             "describe_output": "",
-
             "history": [],
             "chat_history": conversation_manager.get_messages(session_id),
-
             "retries": 0,
             "max_retries": 2,
-
             "cluster_plan": "",
             "master_script": "",
             "worker_script": "",
             "virtualbox_script": "",
             "cluster_inventory": {},
             "cluster_inventory_path": "",
-
             "python_file": completed.get("python_file", ""),
             "source_type": completed.get("source_type", ""),
         }
@@ -77,8 +66,14 @@ if __name__ == "__main__":
         final_state = graph.invoke(initial_state)
 
         if final_state["intent"] in [
-            "deploy", "scale", "update_image", "update_port", "update_service",
-            "add_config", "enable_ingress", "disable_ingress"
+            "deploy",
+            "scale",
+            "update_image",
+            "update_port",
+            "update_service",
+            "add_config",
+            "enable_ingress",
+            "disable_ingress",
         ]:
             conversation_manager.update_context_from_parsed(session_id, final_state)
 

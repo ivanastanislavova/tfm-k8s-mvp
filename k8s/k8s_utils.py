@@ -1,7 +1,8 @@
 import os
 import subprocess
 
-#os.environ["KUBECONFIG"] = "C:/tfm-k8s-mvp/config"
+# os.environ["KUBECONFIG"] = "C:/tfm-k8s-mvp/config"
+
 
 def run_command(command):
     # FUNCIÓN BASE
@@ -10,7 +11,7 @@ def run_command(command):
     result = subprocess.run(
         command,
         capture_output=True,  # Captura stdout y stderr
-        text=True             # Devuelve strings en vez de bytes
+        text=True,  # Devuelve strings en vez de bytes
     )
 
     # returncode → 0 = OK, !=0 = error
@@ -58,11 +59,16 @@ def get_pods_output(app_name):
     # MONITORING
     # Obtiene los pods de tu app
 
-    code, out, err = run_command([
-        "kubectl", "get", "pods",
-        "-l", f"app={app_name}",   # selector por label
-        "--no-headers"
-    ])
+    code, out, err = run_command(
+        [
+            "kubectl",
+            "get",
+            "pods",
+            "-l",
+            f"app={app_name}",  # selector por label
+            "--no-headers",
+        ]
+    )
 
     if code != 0:
         return False, err if err else out
@@ -74,11 +80,17 @@ def get_first_pod_name(app_name):
     # UTILIDAD INTERNA
     # Saca el nombre del primer pod
 
-    code, out, err = run_command([
-        "kubectl", "get", "pods",
-        "-l", f"app={app_name}",
-        "-o", "jsonpath={.items[0].metadata.name}"  # para extraer nombre
-    ])
+    code, out, err = run_command(
+        [
+            "kubectl",
+            "get",
+            "pods",
+            "-l",
+            f"app={app_name}",
+            "-o",
+            "jsonpath={.items[0].metadata.name}",  # para extraer nombre
+        ]
+    )
 
     if code != 0 or not out.strip():
         return False, err if err else out
@@ -119,11 +131,15 @@ def describe_pod(app_name):
 def scale_deployment(app_name, replicas):
     # ESCALADO dinámico
 
-    code, out, err = run_command([
-        "kubectl", "scale", "deployment",
-        f"{app_name}-deployment",
-        f"--replicas={replicas}"
-    ])
+    code, out, err = run_command(
+        [
+            "kubectl",
+            "scale",
+            "deployment",
+            f"{app_name}-deployment",
+            f"--replicas={replicas}",
+        ]
+    )
 
     if code != 0:
         return False, err if err else out
@@ -134,10 +150,9 @@ def scale_deployment(app_name, replicas):
 def get_deployment_status(app_name):
     # CONSULTAR estado del deployment
 
-    code, out, err = run_command([
-        "kubectl", "get", "deployment",
-        f"{app_name}-deployment"
-    ])
+    code, out, err = run_command(
+        ["kubectl", "get", "deployment", f"{app_name}-deployment"]
+    )
 
     if code != 0:
         return False, err if err else out
@@ -149,34 +164,31 @@ def delete_app_resources(app_name):
     # LIMPIEZA TOTAL
     # Borra todos los recursos asociados a la app
 
-    run_command([
-        "kubectl", "delete", "deployment",
-        f"{app_name}-deployment",
-        "--ignore-not-found"   # evita errores si no existe
-    ])
+    run_command(
+        [
+            "kubectl",
+            "delete",
+            "deployment",
+            f"{app_name}-deployment",
+            "--ignore-not-found",  # evita errores si no existe
+        ]
+    )
 
-    run_command([
-        "kubectl", "delete", "service",
-        f"{app_name}-service",
-        "--ignore-not-found"
-    ])
+    run_command(
+        ["kubectl", "delete", "service", f"{app_name}-service", "--ignore-not-found"]
+    )
 
-    run_command([
-        "kubectl", "delete", "configmap",
-        f"{app_name}-config",
-        "--ignore-not-found"
-    ])
+    run_command(
+        ["kubectl", "delete", "configmap", f"{app_name}-config", "--ignore-not-found"]
+    )
 
-    run_command([
-        "kubectl", "delete", "ingress",
-        f"{app_name}-ingress",
-        "--ignore-not-found"
-    ])
+    run_command(
+        ["kubectl", "delete", "ingress", f"{app_name}-ingress", "--ignore-not-found"]
+    )
+
 
 def get_cluster_nodes():
-    code, out, err = run_command([
-        "kubectl", "get", "nodes", "-o", "wide"
-    ])
+    code, out, err = run_command(["kubectl", "get", "nodes", "-o", "wide"])
 
     if code != 0:
         return False, err if err else out
@@ -185,9 +197,7 @@ def get_cluster_nodes():
 
 
 def get_cluster_pods():
-    code, out, err = run_command([
-        "kubectl", "get", "pods", "-A"
-    ])
+    code, out, err = run_command(["kubectl", "get", "pods", "-A"])
 
     if code != 0:
         return False, err if err else out

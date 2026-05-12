@@ -12,23 +12,29 @@ Cada nodo representa una acción del sistema.
 import os
 
 import time
+
 # Se usa en la espera dinámica entre comprobaciones del estado de los pods.
 
 import difflib
+
 # Librería estándar para comparar strings parecidos.
 # Aquí se usa para detectar typos simples como "ngiinx" -> "nginx".
 
 import subprocess
+
 # Se usa para ejecutar comandos de shell, como kubectl o scripts de provisioning.
 
 from core.state import AgentState
+
 # Estado compartido entre todos los agentes.
 # Cada nodo lo recibe, lo modifica y lo devuelve.
 
 from k8s.yaml_generator import write_yaml_files
+
 # Función que genera y guarda los YAMLs (Deployment, Service, ConfigMap, Ingress).
 
 from llm.llm_yaml_generator import generate_yaml_with_llm
+
 # Función que genera YAMLs usando un LLM (opcional, no determinista).
 
 from provisioning.cloud_provisioner import provision_infrastructure
@@ -44,9 +50,11 @@ from k8s.k8s_utils import (
     get_pod_logs,
     describe_pod,
 )
+
 # Funciones auxiliares que interactúan con Kubernetes usando kubectl.
 
 from agents.llm_agents import diagnose_with_llm, suggest_fix_with_llm
+
 # Aquí están las funciones que sí usan IA/LLM:
 # - diagnose_with_llm: diagnóstico asistido por LLM
 # - suggest_fix_with_llm: sugerencia de corrección asistida por LLM
@@ -70,6 +78,7 @@ def suggest_known_image(image: str):
     if matches:
         return matches[0]
     return None
+
 
 @timed_node("validate")
 def validate_node(state: AgentState):
@@ -186,6 +195,7 @@ def validate_node(state: AgentState):
     state["history"].append("Validator: validación correcta")
     return state
 
+
 @timed_node("generate_yaml_template")
 def generate_yaml_node(state: AgentState):
     print("\n[AGENT] YAML Generator Agent\n")
@@ -200,7 +210,7 @@ def generate_yaml_node(state: AgentState):
         state["service_type"],
         state["config_data"],
         state["use_ingress"],
-        state["ingress_host"]
+        state["ingress_host"],
     )
 
     # Guardamos en el estado los YAMLs generados
@@ -222,6 +232,7 @@ def generate_yaml_node(state: AgentState):
         )
 
     return state
+
 
 @timed_node("deploy_kubectl")
 def deploy_node(state: AgentState):
@@ -246,6 +257,7 @@ def deploy_node(state: AgentState):
 
     return state
 
+
 @timed_node("scale")
 def scale_node(state: AgentState):
     print("\n[AGENT] Scale Agent\n")
@@ -267,6 +279,7 @@ def scale_node(state: AgentState):
 
     return state
 
+
 @timed_node("delete")
 def delete_node(state: AgentState):
     print("\n[AGENT] Delete Agent\n")
@@ -277,6 +290,7 @@ def delete_node(state: AgentState):
     state["reason"] = "resources deleted"
     state["history"].append(f"Delete: recursos de {state['app_name']} eliminados")
     return state
+
 
 @timed_node("status")
 def status_node(state: AgentState):
@@ -327,6 +341,7 @@ def status_node(state: AgentState):
     state["has_error"] = True
 
     return state
+
 
 @timed_node("observe_kubernetes")
 def observe_node(state: AgentState):
@@ -382,6 +397,7 @@ def observe_node(state: AgentState):
 
     return state
 
+
 @timed_node("diagnose_deterministic")
 def diagnose_node(state: AgentState):
     print("\n[AGENT] Diagnosis Agent\n")
@@ -405,9 +421,7 @@ def diagnose_node(state: AgentState):
     ]:
         print(f"Diagnóstico: {state['diagnosis']}")
         print(f"Razón: {state['reason']}\n")
-        state["history"].append(
-            f"Diagnosis: {state['diagnosis']} - {state['reason']}"
-        )
+        state["history"].append(f"Diagnosis: {state['diagnosis']} - {state['reason']}")
         return state
 
     observation = state["observation"].strip()
@@ -429,9 +443,7 @@ def diagnose_node(state: AgentState):
         state["has_error"] = True
         print(f"Diagnóstico: {state['diagnosis']}")
         print(f"Razón: {state['reason']}\n")
-        state["history"].append(
-            f"Diagnosis: {state['diagnosis']} - {state['reason']}"
-        )
+        state["history"].append(f"Diagnosis: {state['diagnosis']} - {state['reason']}")
         return state
 
     # Regla determinista para crash loop
@@ -441,9 +453,7 @@ def diagnose_node(state: AgentState):
         state["has_error"] = True
         print(f"Diagnóstico: {state['diagnosis']}")
         print(f"Razón: {state['reason']}\n")
-        state["history"].append(
-            f"Diagnosis: {state['diagnosis']} - {state['reason']}"
-        )
+        state["history"].append(f"Diagnosis: {state['diagnosis']} - {state['reason']}")
         return state
 
     # Regla determinista para estado aún en creación
@@ -453,21 +463,22 @@ def diagnose_node(state: AgentState):
         state["has_error"] = False
         print(f"Diagnóstico: {state['diagnosis']}")
         print(f"Razón: {state['reason']}\n")
-        state["history"].append(
-            "Stabilization: pods are still starting"
-        )
+        state["history"].append("Stabilization: pods are still starting")
         return state
 
     # Caso sano por reglas
-    if "Running" in observation and "0/1" not in observation and "Err" not in observation and "BackOff" not in observation:
+    if (
+        "Running" in observation
+        and "0/1" not in observation
+        and "Err" not in observation
+        and "BackOff" not in observation
+    ):
         state["diagnosis"] = "healthy"
         state["reason"] = "pods running"
         state["has_error"] = False
         print(f"Diagnóstico: {state['diagnosis']}")
         print(f"Razón: {state['reason']}\n")
-        state["history"].append(
-            f"Diagnosis: {state['diagnosis']} - {state['reason']}"
-        )
+        state["history"].append(f"Diagnosis: {state['diagnosis']} - {state['reason']}")
         return state
 
     # Solo si no hay patrón claro, se apoya en IA
@@ -477,7 +488,7 @@ def diagnose_node(state: AgentState):
         app_name=state["app_name"],
         image=state["image"],
         replicas=state["replicas"],
-        observation=observation
+        observation=observation,
     )
 
     if result:
@@ -488,9 +499,7 @@ def diagnose_node(state: AgentState):
         print(f"Diagnóstico: {state['diagnosis']}")
         print(f"Razón: {state['reason']}\n")
 
-        state["history"].append(
-            f"Diagnosis: {state['diagnosis']} - {state['reason']}"
-        )
+        state["history"].append(f"Diagnosis: {state['diagnosis']} - {state['reason']}")
     else:
         state["diagnosis"] = "unknown"
         state["reason"] = "LLM diagnosis failed"
@@ -500,6 +509,7 @@ def diagnose_node(state: AgentState):
         state["history"].append("Diagnosis: fallo en el LLM")
 
     return state
+
 
 @timed_node("repair_deterministic")
 def repair_node(state: AgentState):
@@ -544,7 +554,7 @@ def repair_node(state: AgentState):
         replicas=state["replicas"],
         diagnosis=state["diagnosis"],
         reason=state["reason"],
-        observation=state["observation"]
+        observation=state["observation"],
     )
 
     if not suggestion:
@@ -559,9 +569,9 @@ def repair_node(state: AgentState):
 
     # Comprobamos si la sugerencia cambia algo de verdad
     changed = (
-        new_app_name != state["app_name"] or
-        new_image != state["image"] or
-        new_replicas != state["replicas"]
+        new_app_name != state["app_name"]
+        or new_image != state["image"]
+        or new_replicas != state["replicas"]
     )
 
     if changed:
@@ -592,6 +602,7 @@ def repair_node(state: AgentState):
 
     return state
 
+
 @timed_node("show_yaml")
 def show_yaml_node(state: AgentState):
     print("\n[AGENT] YAML Viewer Agent\n")
@@ -618,6 +629,7 @@ def show_yaml_node(state: AgentState):
     state["history"].append("YAML Viewer: YAML mostrado")
     return state
 
+
 @timed_node("show_logs")
 def show_logs_node(state: AgentState):
     print("\n[AGENT] Logs Agent\n")
@@ -639,6 +651,7 @@ def show_logs_node(state: AgentState):
         state["reason"] = "pod logs returned"
 
     return state
+
 
 @timed_node("describe_pod")
 def describe_pod_node(state: AgentState):
@@ -662,6 +675,7 @@ def describe_pod_node(state: AgentState):
 
     return state
 
+
 @timed_node("cluster_plan")
 def cluster_plan_node(state: AgentState):
     print("\n[AGENT] Cluster Provisioning Agent\n")
@@ -672,13 +686,15 @@ def cluster_plan_node(state: AgentState):
         "workers": state["workers"],
         "cni": "calico",
         "kubernetes_version": "v1.30",
-        "container_runtime": "containerd"
+        "container_runtime": "containerd",
     }
 
     print(f"Parámetros del clúster: {params}\n")
     state["history"].append(f"Cluster Provisioning: parámetros {params}")
 
-    cluster_plan, master_script, worker_script, virtualbox_script, inventory = generate_cluster_artifacts(params)
+    cluster_plan, master_script, worker_script, virtualbox_script, inventory = (
+        generate_cluster_artifacts(params)
+    )
 
     state["cluster_plan"] = cluster_plan
     state["master_script"] = master_script
@@ -686,7 +702,9 @@ def cluster_plan_node(state: AgentState):
     state["virtualbox_script"] = virtualbox_script
     state["cluster_inventory"] = inventory
     state["diagnosis"] = "cluster_plan_ready"
-    state["reason"] = "cluster provisioning plan and scripts generated from LLM parameters"
+    state["reason"] = (
+        "cluster provisioning plan and scripts generated from LLM parameters"
+    )
 
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     output_dir = os.path.join(BASE_DIR, "generated_cluster")
@@ -705,11 +723,14 @@ def cluster_plan_node(state: AgentState):
         "Scripts generated in generated_cluster/: "
         "create_vms.ps1, master_setup.sh and worker_setup.sh"
     )
-    state["history"].append("Cluster Provisioning: scripts guardados en generated_cluster/")
+    state["history"].append(
+        "Cluster Provisioning: scripts guardados en generated_cluster/"
+    )
 
     print("Plan de clúster generado.\n")
 
     return state
+
 
 @timed_node("cluster_status")
 def cluster_status_node(state: AgentState):
@@ -720,10 +741,7 @@ def cluster_status_node(state: AgentState):
     try:
         if provider == "minikube":
             result = subprocess.run(
-                "kubectl get nodes",
-                capture_output=True,
-                text=True,
-                shell=True
+                "kubectl get nodes", capture_output=True, text=True, shell=True
             )
 
             output = result.stdout + result.stderr
@@ -750,11 +768,14 @@ def cluster_status_node(state: AgentState):
 
     return state
 
+
 @timed_node("cluster_execute")
 def cluster_execute_node(state: AgentState):
     print("\n[AGENT] Cluster Execution Agent\n")
 
-    inventory_path = state.get("cluster_inventory_path", "generated_cluster/inventory.json")
+    inventory_path = state.get(
+        "cluster_inventory_path", "generated_cluster/inventory.json"
+    )
 
     print("Ejecutando provisioning de Kubernetes sobre infraestructura cloud...")
 
@@ -774,10 +795,7 @@ def cluster_execute_node(state: AgentState):
         state["history"].append("Cluster Execute: provisioning falló")
 
     if state.get("provider") == "minikube":
-        subprocess.run(
-            "kubectl create deployment nginx --image=nginx",
-            shell=True
-        )
+        subprocess.run("kubectl create deployment nginx --image=nginx", shell=True)
 
     if join_command:
         state["history"].append("Cluster Execute: join command generado y usado")
@@ -786,6 +804,7 @@ def cluster_execute_node(state: AgentState):
     print(f"Razón: {state['reason']}\n")
 
     return state
+
 
 @timed_node("cloud_provision")
 def cloud_provision_node(state: AgentState):
@@ -799,7 +818,7 @@ def cloud_provision_node(state: AgentState):
         "workers": state["workers"],
         "ssh_user": "ubuntu",
         "cpus": 2,
-        "memory": 4096
+        "memory": 4096,
     }
 
     try:
@@ -821,17 +840,19 @@ def cloud_provision_node(state: AgentState):
         state["diagnosis"] = "infrastructure_failed"
         state["reason"] = str(e)
         state["observation"] = str(e)
-        state["history"].append("Cloud Provisioner: fallo al provisionar infraestructura")
+        state["history"].append(
+            "Cloud Provisioner: fallo al provisionar infraestructura"
+        )
 
     return state
+
 
 @timed_node("build_python_app")
 def build_python_app_node(state: AgentState):
     print("\n[AGENT] Python App Builder Agent\n")
 
     success, image_name, output = build_python_app(
-        state["app_name"],
-        state["python_file"]
+        state["app_name"], state["python_file"]
     )
 
     state["observation"] = output
@@ -849,6 +870,7 @@ def build_python_app_node(state: AgentState):
     state["history"].append(f"Python Builder: imagen generada {image_name}")
 
     return state
+
 
 @timed_node("generate_yaml_llm")
 def generate_llm_yaml_node(state: AgentState):
@@ -887,6 +909,7 @@ def generate_llm_yaml_node(state: AgentState):
 
     return state
 
+
 @timed_node("deploy_llm_yaml")
 def deploy_llm_yaml_node(state: AgentState):
     print("\n[AGENT] LLM YAML Execution Agent\n")
@@ -895,7 +918,7 @@ def deploy_llm_yaml_node(state: AgentState):
         "kubectl apply --dry-run=client -f llm_generated.yaml",
         shell=True,
         capture_output=True,
-        text=True
+        text=True,
     )
 
     if dry_run.returncode != 0:
@@ -910,7 +933,7 @@ def deploy_llm_yaml_node(state: AgentState):
         "kubectl apply -f llm_generated.yaml",
         shell=True,
         capture_output=True,
-        text=True
+        text=True,
     )
 
     state["observation"] = result.stdout + result.stderr

@@ -3,8 +3,8 @@ import json
 import os
 from functools import wraps
 
-
-METRICS_FILE = "evaluation_results.jsonl"
+METRICS_FILE = "results/evaluation_results.jsonl"
+os.makedirs("results", exist_ok=True)
 
 
 def timed_node(node_name):
@@ -23,7 +23,9 @@ def timed_node(node_name):
             result["metrics"][node_name] = round(elapsed, 4)
 
             return result
+
         return wrapper
+
     return decorator
 
 
@@ -34,10 +36,10 @@ def save_evaluation_result(final_state, execution_time):
         "intent": final_state.get("intent"),
         "generation_mode": final_state.get("generation_mode"),
         "llm_model": final_state.get("llm_model"),
-
         "diagnosis": final_state.get("diagnosis"),
         "reason": final_state.get("reason"),
-        "success": final_state.get("diagnosis") in [
+        "success": final_state.get("diagnosis")
+        in [
             "healthy",
             "logs_ready",
             "describe_ready",
@@ -45,15 +47,12 @@ def save_evaluation_result(final_state, execution_time):
             "cluster_created",
             "cluster_plan_ready",
         ],
-
         "e2e_time_seconds": round(execution_time, 4),
         "node_times": final_state.get("metrics", {}),
-
         "app_name": final_state.get("app_name"),
         "image": final_state.get("image"),
         "replicas": final_state.get("replicas"),
         "service_type": final_state.get("service_type"),
-
         "history": final_state.get("history", []),
     }
 

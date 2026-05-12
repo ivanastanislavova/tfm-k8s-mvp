@@ -1,4 +1,5 @@
 from copy import deepcopy
+
 # deepcopy se usa para copiar estructuras complejas (diccionarios)
 # sin compartir referencias (muy importante para evitar bugs)
 
@@ -13,7 +14,7 @@ DEFAULT_CONTEXT = {
     "use_ingress": False,
     "ingress_host": "",
     "masters": 1,
-    "workers": 1
+    "workers": 1,
 }
 # CONTEXTO BASE
 # Esto es como el "estado inicial" de una conversación
@@ -30,7 +31,6 @@ class ConversationManager:
         #   messages: [...]
         # }
 
-
     def get_session(self, session_id: str):
         # Obtiene o crea una sesión
 
@@ -38,19 +38,16 @@ class ConversationManager:
             self.sessions[session_id] = {
                 "context": deepcopy(DEFAULT_CONTEXT),
                 # Cada sesión tiene su propio contexto independiente
-
-                "messages": []
+                "messages": [],
                 # Historial de mensajes tipo chat
             }
 
         return self.sessions[session_id]
 
-
     def get_context(self, session_id: str):
         # Devuelve el contexto actual de la sesión
         session = self.get_session(session_id)
         return session["context"]
-
 
     def add_message(self, session_id: str, role: str, text: str):
         # Guarda mensajes tipo chat
@@ -58,11 +55,7 @@ class ConversationManager:
 
         session = self.get_session(session_id)
 
-        session["messages"].append({
-            "role": role,
-            "text": text
-        })
-
+        session["messages"].append({"role": role, "text": text})
 
     def update_context_from_parsed(self, session_id: str, parsed: dict):
         # ACTUALIZA el contexto con lo que el usuario acaba de decir
@@ -71,8 +64,16 @@ class ConversationManager:
         context = session["context"]
 
         for key in [
-            "app_name", "image", "replicas", "port", "service_type",
-            "config_data", "use_ingress", "ingress_host", "masters", "workers"
+            "app_name",
+            "image",
+            "replicas",
+            "port",
+            "service_type",
+            "config_data",
+            "use_ingress",
+            "ingress_host",
+            "masters",
+            "workers",
         ]:
             if key not in parsed:
                 continue
@@ -130,7 +131,6 @@ class ConversationManager:
                     context[key] = value
                 continue
 
-
     def fill_missing_from_context(self, session_id: str, parsed: dict):
         # COMPLETA lo que falta en el input del usuario usando contexto
 
@@ -140,8 +140,16 @@ class ConversationManager:
         completed = deepcopy(parsed)
 
         for key in [
-            "app_name", "image", "replicas", "port",
-            "service_type", "config_data", "use_ingress", "ingress_host", "masters", "workers"
+            "app_name",
+            "image",
+            "replicas",
+            "port",
+            "service_type",
+            "config_data",
+            "use_ingress",
+            "ingress_host",
+            "masters",
+            "workers",
         ]:
 
             if key not in completed:
@@ -186,7 +194,6 @@ class ConversationManager:
                 continue
 
         return completed
-
 
     def get_messages(self, session_id: str):
         # Devuelve el historial del chat

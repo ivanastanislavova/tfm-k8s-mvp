@@ -8,16 +8,13 @@ Extrae:
 
 Solo genera parámetros, no ejecuta comandos.
 """
+
 from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage
 import json
 import re
 
-
-llm = ChatOllama(
-    model="llama3.2:3b",
-    temperature=0
-)
+llm = ChatOllama(model="llama3.2:3b", temperature=0)
 
 
 def extract_json(text: str):
@@ -67,7 +64,7 @@ User request:
             "workers": int(data.get("workers", 1)),
             "cni": data.get("cni", "calico"),
             "kubernetes_version": data.get("kubernetes_version", "v1.35"),
-            "container_runtime": "containerd"
+            "container_runtime": "containerd",
         }
 
     except Exception:
@@ -79,5 +76,5 @@ User request:
             "workers": 1,
             "cni": "calico",
             "kubernetes_version": "v1.35",
-            "container_runtime": "containerd"
+            "container_runtime": "containerd",
         }

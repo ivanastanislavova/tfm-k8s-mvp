@@ -117,7 +117,16 @@ spec:
     # - backend.service.port.number = puerto del Service
 
 
-def write_yaml_files(app_name, image, replicas, port, service_type, config_data, use_ingress, ingress_host):
+def write_yaml_files(
+    app_name,
+    image,
+    replicas,
+    port,
+    service_type,
+    config_data,
+    use_ingress,
+    ingress_host,
+):
     # Esta función es la que orquesta todo.
     # Genera los YAMLs necesarios, los guarda en archivos .yaml y además los devuelve como texto.
 
