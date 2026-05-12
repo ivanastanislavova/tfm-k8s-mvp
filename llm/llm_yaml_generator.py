@@ -55,9 +55,7 @@ def validate_llm_yaml(
     )
 
     selector_labels = (
-        deployment.get("spec", {})
-        .get("selector", {})
-        .get("matchLabels", {})
+        deployment.get("spec", {}).get("selector", {}).get("matchLabels", {})
     )
 
     service_selector = service.get("spec", {}).get("selector", {})
