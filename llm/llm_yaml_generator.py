@@ -1,7 +1,7 @@
 import re
 import yaml
 from langchain_core.messages import HumanMessage
-from llm_provider import get_llm
+from llm.llm_provider import get_llm
 
 
 def extract_yaml(text: str) -> str:

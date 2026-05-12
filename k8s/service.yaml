@@ -7,6 +7,6 @@ spec:
     app: nginx
   ports:
   - protocol: TCP
-    port: 9090
-    targetPort: 9090
-  type: ClusterIP
+    port: 80
+    targetPort: 80
+  type: NodePort

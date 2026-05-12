@@ -1,7 +1,9 @@
 from langchain_core.messages import HumanMessage
-from llm_provider import get_llm
+from llm.llm_provider import get_llm
+from core.metrics import timed_node
 
 
+@timed_node("diagnose_llm")
 def diagnose_llm_node(state):
 
     print("\n[AGENT] LLM Diagnosis Agent\n")

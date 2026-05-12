@@ -1,4 +1,4 @@
-from llm_provider import get_llm
+from llm.llm_provider import get_llm
 # Aquí definimos el parser híbrido que interpreta el texto del usuario.
 
 from langchain_core.messages import HumanMessage

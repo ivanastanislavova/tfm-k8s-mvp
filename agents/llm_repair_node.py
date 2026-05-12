@@ -1,9 +1,11 @@
 import re
 import yaml
 from langchain_core.messages import HumanMessage
-from llm_provider import get_llm
+from llm.llm_provider import get_llm
+from core.metrics import timed_node
 
 
+@timed_node("repair_llm")
 def extract_yaml(text: str) -> str:
     text = text.strip()
     text = re.sub(r"```yaml", "", text, flags=re.IGNORECASE)

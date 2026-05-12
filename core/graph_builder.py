@@ -10,10 +10,10 @@ from langgraph.graph import StateGraph, END
 # StateGraph = estructura principal de LangGraph (grafo de estados)
 # END = estado final del flujo
 
-from state import AgentState
+from core.state import AgentState
 # Estado global compartido entre todos los agentes (clave del sistema)
 
-from graph_nodes import (
+from agents.graph_nodes import (
     validate_node,
     generate_yaml_node,
     deploy_node,
@@ -34,15 +34,14 @@ from graph_nodes import (
     generate_llm_yaml_node,
     deploy_llm_yaml_node,
 )
-import state
+import core.state as state
 # Cada nodo es un "agente" con una responsabilidad concreta
 
-from diagnose_llm_node import diagnose_llm_node
+from agents.diagnose_llm_node import diagnose_llm_node
 # Nodo específico para diagnóstico con LLM → más capacidad de interpretación
 
-from llm_repair_node import repair_llm_node
+from agents.llm_repair_node import repair_llm_node
 # Nodo específico para reparación con LLM → más capacidad de corrección
-
 
 
 def build_graph():

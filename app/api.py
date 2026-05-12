@@ -5,11 +5,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-from graph_builder import build_graph
-from llm_parser import parse_user_input
-from conversation_manager import ConversationManager
+from core.graph_builder import build_graph
+from llm.llm_parser import parse_user_input
+from core.conversation_manager import ConversationManager
 
-from metrics import save_evaluation_result
+from core.metrics import save_evaluation_result
 
 app = FastAPI()
 conversation_manager = ConversationManager()

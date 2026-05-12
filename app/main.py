@@ -1,6 +1,6 @@
-from graph_builder import build_graph
-from llm_parser import parse_user_input
-from conversation_manager import ConversationManager
+from core.graph_builder import build_graph
+from llm.llm_parser import parse_user_input
+from core.conversation_manager import ConversationManager
 
 conversation_manager = ConversationManager()
 
@@ -17,7 +17,7 @@ if __name__ == "__main__":
         parsed = parse_user_input(user_text, context=context)
 
         if not parsed:
-            print("❌ No se pudo interpretar la petición.")
+            print("No se pudo interpretar la petición.")
             continue
 
         completed = conversation_manager.fill_missing_from_context(session_id, parsed)

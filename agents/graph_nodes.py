@@ -22,21 +22,21 @@ import difflib
 import subprocess
 # Se usa para ejecutar comandos de shell, como kubectl o scripts de provisioning.
 
-from state import AgentState
+from core.state import AgentState
 # Estado compartido entre todos los agentes.
 # Cada nodo lo recibe, lo modifica y lo devuelve.
 
-from yaml_generator import write_yaml_files
+from k8s.yaml_generator import write_yaml_files
 # Función que genera y guarda los YAMLs (Deployment, Service, ConfigMap, Ingress).
 
-from llm_yaml_generator import generate_yaml_with_llm
+from llm.llm_yaml_generator import generate_yaml_with_llm
 # Función que genera YAMLs usando un LLM (opcional, no determinista).
 
-from cloud_provisioner import provision_infrastructure
+from provisioning.cloud_provisioner import provision_infrastructure
 
-from metrics import timed_node
+from core.metrics import timed_node
 
-from k8s_utils import (
+from k8s.k8s_utils import (
     deploy_files,
     get_pods_output,
     delete_app_resources,
@@ -49,21 +49,22 @@ from k8s_utils import (
 )
 # Funciones auxiliares que interactúan con Kubernetes usando kubectl.
 
-from llm_agents import diagnose_with_llm, suggest_fix_with_llm
+from agents.llm_agents import diagnose_with_llm, suggest_fix_with_llm
 # Aquí están las funciones que sí usan IA/LLM:
 # - diagnose_with_llm: diagnóstico asistido por LLM
 # - suggest_fix_with_llm: sugerencia de corrección asistida por LLM
+# Estas funciones se llaman desde los nodos de diagnóstico y reparación cuando no hay una solución determinista clara.
 
 
 KNOWN_IMAGES = ["nginx", "httpd", "mongo", "redis", "postgres", "busybox"]
 # Lista de imágenes conocidas y "seguras" para detectar typos simples.
 # Esto hace que parte de la remediación sea determinista y no dependa del LLM.
 
-from cluster_agents import parse_cluster_request_with_llm
-from cluster_script_generator import generate_cluster_artifacts
-from cluster_executor import execute_cluster_provisioning
+from agents.cluster_agents import parse_cluster_request_with_llm
+from agents.cluster_script_generator import generate_cluster_artifacts
+from provisioning.cluster_executor import execute_cluster_provisioning
 
-from python_app_builder import build_python_app
+from builders.python_app_builder import build_python_app
 
 
 def suggest_known_image(image: str):
