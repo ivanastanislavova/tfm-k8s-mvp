@@ -305,9 +305,25 @@ def status_node(state: AgentState):
             parts = lines[1].split()
             ready = parts[1] if len(parts) > 1 else ""
 
-            state["diagnosis"] = "healthy"
-            state["reason"] = f"Deployment status ready: {ready}"
-            state["has_error"] = False
+            try:
+                ready_count, desired_count = ready.split("/")
+                ready_count = int(ready_count)
+                desired_count = int(desired_count)
+            except Exception:
+                state["diagnosis"] = "unknown"
+                state["reason"] = f"Deployment ready value could not be parsed: {ready}"
+                state["has_error"] = True
+                return state
+
+            if ready_count == desired_count and desired_count > 0:
+                state["diagnosis"] = "healthy"
+                state["reason"] = f"Deployment status ready: {ready}"
+                state["has_error"] = False
+            else:
+                state["diagnosis"] = "creating"
+                state["reason"] = f"Deployment not fully ready: {ready}"
+                state["has_error"] = False
+
             return state
 
     state["diagnosis"] = "unknown"
@@ -319,30 +335,51 @@ def status_node(state: AgentState):
 @timed_node("observe_kubernetes")
 def observe_node(state: AgentState):
     print("\n[AGENT] Monitor Agent\n")
-    print("Esperando 8 segundos para observar el estado real...\n")
-    # El monitor espera unos segundos para dar tiempo a Kubernetes
-    # y luego recoge el estado real de los pods.
+    print("Observando el estado de Kubernetes con espera dinámica...\n")
 
-    time.sleep(8)
+    max_attempts = 5
+    wait_seconds = 2
 
-    success, output = get_pods_output(state["app_name"])
-    print(output)
+    final_success = False
+    final_output = ""
 
-    state["observation"] = output
+    for attempt in range(max_attempts):
+        success, output = get_pods_output(state["app_name"])
+        final_success = success
+        final_output = output
+
+        print(output)
+
+        if not success:
+            state["has_error"] = True
+            state["diagnosis"] = "cluster_unreachable"
+            state["reason"] = "kubectl get pods failed"
+            state["observation"] = output
+            state["history"].append("Monitor: clúster inaccesible")
+            return state
+
+        cleaned_output = output.strip()
+
+        if cleaned_output != "":
+            state["observation"] = output
+
+            if (
+                "Running" in output
+                or "ErrImagePull" in output
+                or "ImagePullBackOff" in output
+                or "CrashLoopBackOff" in output
+            ):
+                break
+
+        if attempt < max_attempts - 1:
+            time.sleep(wait_seconds)
+
+    state["observation"] = final_output
     state["history"].append(
         f"Monitor: observación recogida del clúster para app={state['app_name']}"
     )
 
-    # Si no se puede consultar el clúster
-    if not success:
-        state["has_error"] = True
-        state["diagnosis"] = "cluster_unreachable"
-        state["reason"] = "kubectl get pods failed"
-        state["history"].append("Monitor: clúster inaccesible")
-        return state
-
-    # Si no aparecen pods, algo raro ha pasado
-    if output.strip() == "":
+    if final_output.strip() == "":
         state["has_error"] = True
         state["diagnosis"] = "unknown"
         state["reason"] = "no pods found for app"
