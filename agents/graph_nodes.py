@@ -12,8 +12,7 @@ Cada nodo representa una acción del sistema.
 import os
 
 import time
-# Se usa para esperar unos segundos antes de observar el estado real del clúster.
-# Esto da tiempo a Kubernetes a crear los pods.
+# Se usa en la espera dinámica entre comprobaciones del estado de los pods.
 
 import difflib
 # Librería estándar para comparar strings parecidos.
@@ -44,8 +43,6 @@ from k8s.k8s_utils import (
     get_deployment_status,
     get_pod_logs,
     describe_pod,
-    get_cluster_nodes,
-    get_cluster_pods,
 )
 # Funciones auxiliares que interactúan con Kubernetes usando kubectl.
 
@@ -60,7 +57,6 @@ KNOWN_IMAGES = ["nginx", "httpd", "mongo", "redis", "postgres", "busybox"]
 # Lista de imágenes conocidas y "seguras" para detectar typos simples.
 # Esto hace que parte de la remediación sea determinista y no dependa del LLM.
 
-from agents.cluster_agents import parse_cluster_request_with_llm
 from agents.cluster_script_generator import generate_cluster_artifacts
 from provisioning.cluster_executor import execute_cluster_provisioning
 
@@ -340,7 +336,6 @@ def observe_node(state: AgentState):
     max_attempts = 5
     wait_seconds = 2
 
-    final_success = False
     final_output = ""
 
     for attempt in range(max_attempts):
@@ -376,7 +371,7 @@ def observe_node(state: AgentState):
 
     state["observation"] = final_output
     state["history"].append(
-        f"Monitor: observación recogida del clúster para app={state['app_name']}"
+        f"Stabilization: checking pod readiness for app={state['app_name']}"
     )
 
     if final_output.strip() == "":
@@ -454,12 +449,12 @@ def diagnose_node(state: AgentState):
     # Regla determinista para estado aún en creación
     if "Pending" in observation or "ContainerCreating" in observation:
         state["diagnosis"] = "creating"
-        state["reason"] = "pods still creating"
+        state["reason"] = "pods are still starting"
         state["has_error"] = False
         print(f"Diagnóstico: {state['diagnosis']}")
         print(f"Razón: {state['reason']}\n")
         state["history"].append(
-            f"Diagnosis: {state['diagnosis']} - {state['reason']}"
+            "Stabilization: pods are still starting"
         )
         return state
 
