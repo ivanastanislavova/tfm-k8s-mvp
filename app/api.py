@@ -10,6 +10,7 @@ from llm.llm_parser import parse_user_input
 from core.conversation_manager import ConversationManager
 
 from core.metrics import save_evaluation_result
+from fastapi.responses import FileResponse
 
 app = FastAPI()
 conversation_manager = ConversationManager()
@@ -30,70 +31,9 @@ class DeployRequest(BaseModel):
     generation_mode: str = "hybrid_template"
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", response_class=FileResponse)
 def home():
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>K8s Agentic Chat</title>
-    </head>
-    <body>
-      <h2>Chat Kubernetes</h2>
-
-      <label>Session:</label>
-      <input id="session" style="width:200px" value="default" placeholder="session_id" />
-
-      <br><br>
-
-      <label>LLM:</label>
-      <select id="llm_model">
-        <option value="llama3.2:3b">Llama 3.2 3B</option>
-        <option value="mistral">Mistral 7B</option>
-      </select>
-
-      <br><br>
-
-      <label>Versión:</label>
-      <select id="generation_mode">
-      <option value="hybrid_template">Híbrida: plantilla + agentes</option>
-      <option value="full_ai_experimental">Full AI: YAML + diagnóstico + reparación con IA</option>
-      </select>
-
-      <br><br>
-
-      <input id="input" style="width:700px" placeholder="deploy nginx with 2 replicas" />
-      <button onclick="sendMessage()">Enviar</button>
-
-      <pre id="output"></pre>
-
-      <script>
-      async function sendMessage() {
-        const text = document.getElementById("input").value;
-        const session_id = document.getElementById("session").value;
-        const llm_model = document.getElementById("llm_model").value;
-        const output = document.getElementById("output");
-        const generation_mode = document.getElementById("generation_mode").value;
-
-        output.textContent = "Ejecutando...";
-
-        try {
-          const res = await fetch("/deploy", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({ text, session_id, llm_model, generation_mode })
-          });
-
-          const data = await res.json();
-          output.textContent = JSON.stringify(data, null, 2);
-        } catch (err) {
-          output.textContent = "Error: " + err;
-        }
-      }
-      </script>
-    </body>
-    </html>
-    """
+    return FileResponse("app/index.html")
 
 
 @app.post("/deploy")
@@ -246,6 +186,12 @@ def deploy(request: DeployRequest):
             "generation_mode": final_state["generation_mode"],
             "llm_generated_yaml": final_state["llm_generated_yaml"],
             "metrics": final_state["metrics"],
+            "deployment_yaml": final_state["deployment_yaml"],
+            "service_yaml": final_state["service_yaml"],
+            "configmap_yaml": final_state["configmap_yaml"],
+            "ingress_yaml": final_state["ingress_yaml"],
+            "logs_output": final_state["logs_output"],
+            "describe_output": final_state["describe_output"],
         }
 
     except Exception as e:

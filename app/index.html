@@ -1,41 +1,528 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>K8s Agentic Deploy</title>
+  <meta charset="UTF-8" />
+  <title>K8s Agentic Dashboard</title>
+  <style>
+    * { box-sizing: border-box; font-family: Inter, Arial, sans-serif; }
+    body { margin: 0; background: #f5f7fb; color: #172033; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 240px 1fr 420px;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      background: #111827;
+      color: white;
+      padding: 24px;
+      min-height: 100vh;
+      position: sticky;
+      top: 0;
+      align-self: start;
+    }
+
+    .logo {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 32px;
+    }
+
+    .nav-item {
+      padding: 12px;
+      border-radius: 10px;
+      margin-bottom: 8px;
+      background: rgba(255,255,255,0.06);
+    }
+
+    .main {
+      padding: 28px;
+      overflow: visible;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .badge {
+      background: #dcfce7;
+      color: #166534;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 8px 24px rgba(15,23,42,0.06);
+    }
+
+    .card h3 {
+      margin: 0;
+      font-size: 14px;
+      color: #64748b;
+    }
+
+    .card .value {
+      margin-top: 10px;
+      font-size: 30px;
+      font-weight: 800;
+    }
+
+    .section {
+      background: white;
+      border-radius: 18px;
+      padding: 22px;
+      margin-bottom: 24px;
+      box-shadow: 0 8px 24px rgba(15,23,42,0.06);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 12px;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 14px;
+    }
+
+    th { color: #64748b; font-weight: 600; }
+
+    .status-ok {
+      color: #16a34a;
+      font-weight: 700;
+    }
+
+    .terminal {
+      background: #020617;
+      color: #e5e7eb;
+      padding: 18px;
+      border-radius: 14px;
+      min-height: 140px;
+      white-space: pre-wrap;
+      font-family: Consolas, monospace;
+      font-size: 13px;
+      overflow-x: auto;
+    }
+
+    .chat {
+      background: white;
+      border-left: 1px solid #e5e7eb;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      position: sticky;
+      top: 0;
+      align-self: start;
+    }
+
+    .chat-header {
+      padding: 22px;
+      border-bottom: 1px solid #e5e7eb;
+      flex-shrink: 0;
+    }
+
+    .chat-header h2 { margin: 0; }
+
+    .chat-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    select, input, button {
+      border-radius: 10px;
+      border: 1px solid #cbd5e1;
+      padding: 10px;
+      font-size: 14px;
+    }
+
+
+    .messages {
+      flex: 1;
+      padding: 18px;
+      background: #f8fafc;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .message {
+      padding: 12px 14px;
+      border-radius: 14px;
+      margin-bottom: 12px;
+      max-width: 90%;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .user {
+      background: #2563eb;
+      color: white;
+      margin-left: auto;
+    }
+
+    .assistant {
+      background: white;
+      border: 1px solid #e5e7eb;
+      color: #111827;
+    }
+
+    .chat-input {
+      padding: 16px;
+      border-top: 1px solid #e5e7eb;
+      display: flex;
+      gap: 8px;
+      background: white;
+      flex-shrink: 0;
+    }
+
+    .chat-input input {
+      flex: 1;
+    }
+
+    button {
+      background: #2563eb;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    button:hover { background: #1d4ed8; }
+
+    .yaml {
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+      padding: 14px;
+      border-radius: 12px;
+      font-family: Consolas, monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+      max-height: 260px;
+      overflow-y: auto;
+    }
+
+    .field-label {
+      display: block;
+      margin-top: 14px;
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #475569;
+    }
+
+    .session-pill {
+      margin-top: 16px;
+      padding: 14px;
+      border-radius: 14px;
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+    }
+
+    .session-pill span {
+      color: #64748b;
+      font-weight: 700;
+    }
+
+    .small-btn {
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+    }
+  </style>
 </head>
+
 <body>
+  <div class="layout">
 
-<h2>Deploy con lenguaje natural</h2>
+    <aside class="sidebar">
+      <div class="logo">K8s Agentic UI</div>
+      <div class="nav-item">Overview</div>
+      <div class="nav-item">Workloads</div>
+      <div class="nav-item">Services</div>
+      <div class="nav-item">YAML Preview</div>
+      <div class="nav-item">Metrics</div>
+      <div class="sidebar-session">
+        <div class="session-title">Session</div>
+        <div id="sidebarSessionValue" class="session-empty">No session assigned</div>
+        <button class="session-button" onclick="setSession()">Set session</button>
+      </div>
+    </aside>
 
-<label>LLM:</label>
-<select id="llm_model">
-  <option value="llama3.2:3b">Llama 3.2 3B</option>
-  <option value="mistral">Mistral 7B</option>
-</select>
+    <main class="main">
+      <div class="header">
+        <div>
+          <h1>Kubernetes Deployment Dashboard</h1>
+          <p>Conversational orchestration for Kubernetes application deployment.</p>
+        </div>
+        <span class="badge" id="clusterStatus">Cluster connected</span>
+      </div>
 
-<br><br>
+      <div class="cards">
+        <div class="card">
+          <h3>Application</h3>
+          <div class="value" id="appName">—</div>
+        </div>
+        <div class="card">
+          <h3>Image</h3>
+          <div class="value" id="imageName">—</div>
+        </div>
+        <div class="card">
+          <h3>Replicas</h3>
+          <div class="value" id="replicas">—</div>
+        </div>
+        <div class="card">
+          <h3>Service</h3>
+          <div class="value" id="serviceType">—</div>
+        </div>
+      </div>
 
-<input id="input" style="width:300px" placeholder="deploy nginx with 2 replicas">
-<button onclick="deploy()">Deploy</button>
+      <section class="section">
+        <h2>Current Workload</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Image</th>
+              <th>Replicas</th>
+              <th>Port</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="workloadTable">
+            <tr>
+              <td colspan="5">No deployment executed yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
 
-<pre id="output"></pre>
+      <section class="section">
+        <h2>Execution Output</h2>
+        <div class="terminal" id="terminalOutput">Waiting for user request...</div>
+      </section>
 
-<script>
-async function deploy() {
-  const text = document.getElementById("input").value;
-  const llm_model = document.getElementById("llm_model").value;
+      <section class="section">
+        <h2>YAML / LLM Generated Manifest</h2>
+        <div class="yaml" id="yamlPreview">No YAML generated yet.</div>
+      </section>
 
-  const res = await fetch("http://127.0.0.1:8000/deploy", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ text, session_id, llm_model })
-  });
+      <section class="section">
+        <h2>Execution Metrics</h2>
+        <table>
+          <tbody id="metricsTable">
+            <tr>
+              <td>No metrics available yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
 
-  const data = await res.json();
+    <aside class="chat">
+      <div class="chat-header">
+        <h2>AI Assistant</h2>
+        <p>Deploy, scale, inspect or delete Kubernetes resources using natural language.</p>
 
-  document.getElementById("output").textContent = JSON.stringify(data, null, 2);
-}
-</script>
+        <div class="session-pill">
+          <span>Session ID</span>
+          <strong id="sessionLabel">default</strong>
+          <button class="small-btn" onclick="changeSession()">Edit</button>
+        </div>
 
+        <input id="session_id" type="hidden" value="default" />
+
+        <div class="chat-controls">
+          <select id="llm_model">
+            <option value="llama3.2:3b">Llama 3.2 3B</option>
+            <option value="mistral">Mistral 7B</option>
+          </select>
+
+          <select id="generation_mode">
+            <option value="hybrid_template">Hybrid</option>
+            <option value="llm_yaml">Full AI</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="messages" id="messages">
+        <div class="message assistant">
+          Try: <b>deploy nginx with 2 replicas</b>
+        </div>
+      </div>
+
+      <div class="chat-input">
+        <input id="input" placeholder="deploy nginx with 2 replicas" />
+        <button onclick="sendPrompt()">Send</button>
+      </div>
+    </aside>
+
+  </div>
+
+  <script>
+
+    function addMessage(text, type) {
+      const messages = document.getElementById("messages");
+      const div = document.createElement("div");
+      div.className = `message ${type}`;
+      div.innerHTML = text;
+      messages.appendChild(div);
+
+      setTimeout(() => {
+        messages.scrollTop = messages.scrollHeight;
+      }, 50);
+    }
+
+    function updateDashboard(data) {
+      document.getElementById("appName").textContent = data.app_name || "—";
+      document.getElementById("imageName").textContent = data.image || "—";
+      document.getElementById("replicas").textContent = data.replicas ?? "—";
+      document.getElementById("serviceType").textContent = data.service_type || "—";
+
+      document.getElementById("workloadTable").innerHTML = `
+        <tr>
+          <td>${data.app_name || "—"}</td>
+          <td>${data.image || "—"}</td>
+          <td>${data.replicas ?? "—"}</td>
+          <td>${data.port ?? "—"}</td>
+          <td class="status-ok">${data.diagnosis || "Executed"}</td>
+        </tr>
+      `;
+
+      document.getElementById("terminalOutput").textContent =
+        data.observation ||
+        data.reason ||
+        JSON.stringify(data, null, 2);
+
+      const yamlParts = [];
+
+      if (data.llm_generated_yaml) {
+        yamlParts.push("# llm_generated.yaml\n" + data.llm_generated_yaml);
+      }
+
+      if (data.deployment_yaml) {
+        yamlParts.push("# deployment.yaml\n" + data.deployment_yaml);
+      }
+
+      if (data.service_yaml) {
+        yamlParts.push("# service.yaml\n" + data.service_yaml);
+      }
+
+      if (data.configmap_yaml) {
+        yamlParts.push("# configmap.yaml\n" + data.configmap_yaml);
+      }
+
+      if (data.ingress_yaml) {
+        yamlParts.push("# ingress.yaml\n" + data.ingress_yaml);
+      }
+
+      document.getElementById("yamlPreview").textContent =
+        yamlParts.length > 0
+          ? yamlParts.join("\n\n")
+          : "No YAML generated for this operation.";
+
+      const metrics = data.metrics || {};
+      let rows = "";
+
+      rows += `
+        <tr>
+          <td><b>Total execution time</b></td>
+          <td>${data.execution_time_seconds ?? "—"} s</td>
+        </tr>
+      `;
+
+      Object.entries(metrics).forEach(([key, value]) => {
+        rows += `
+          <tr>
+            <td>${key}</td>
+            <td>${value}</td>
+          </tr>
+        `;
+      });
+
+      document.getElementById("metricsTable").innerHTML = rows;
+    }
+
+    function changeSession() {
+      const current = document.getElementById("session_id").value || "default";
+      const next = prompt("Enter session ID:", current);
+
+      if (next && next.trim()) {
+        document.getElementById("session_id").value = next.trim();
+        document.getElementById("sessionLabel").textContent = next.trim();
+      }
+    }
+
+    async function sendPrompt() {
+      const input = document.getElementById("input");
+      const text = input.value.trim();
+
+      if (!text) return;
+
+      const llm_model = document.getElementById("llm_model").value;
+      const generation_mode = document.getElementById("generation_mode").value;
+      const session_id = document.getElementById("session_id").value.trim() || "default";
+
+      addMessage(text, "user");
+      input.value = "";
+
+      addMessage("Executing request...", "assistant");
+
+      try {
+        const res = await fetch("http://127.0.0.1:8000/deploy", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text,
+            session_id,
+            llm_model,
+            generation_mode
+          })
+        });
+
+        const data = await res.json();
+
+        updateDashboard(data);
+
+        addMessage(
+          `<b>${data.diagnosis || "Result"}</b><br>${data.reason || "Request completed."}`,
+          "assistant"
+        );
+
+      } catch (error) {
+        addMessage("Backend connection error. Check that FastAPI is running.", "assistant");
+        document.getElementById("terminalOutput").textContent = error;
+      }
+    }
+
+    document.getElementById("input").addEventListener("keydown", function(e) {
+      if (e.key === "Enter") sendPrompt();
+    });
+  </script>
 </body>
 </html>
