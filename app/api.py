@@ -3,6 +3,7 @@ import time
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from core.graph_builder import build_graph
@@ -14,6 +15,7 @@ from fastapi.responses import FileResponse
 
 app = FastAPI()
 conversation_manager = ConversationManager()
+app.mount("/app/assets", StaticFiles(directory="app/assets"), name="assets")
 
 app.add_middleware(
     CORSMiddleware,
@@ -134,7 +136,7 @@ def deploy(request: DeployRequest):
             conversation_manager.update_context_from_parsed(session_id, final_state)
 
         # Limpiar completamente el contexto si se elimina la app
-        if final_state["intent"] == "delete":
+        if final_state["intent"] == "delete" and final_state["diagnosis"] == "deleted":
             conversation_manager.get_session(session_id)["context"] = {
                 "app_name": "",
                 "image": "",

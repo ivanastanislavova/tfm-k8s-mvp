@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 
 # os.environ["KUBECONFIG"] = "C:/tfm-k8s-mvp/config"
@@ -18,12 +19,41 @@ def run_command(command):
     return result.returncode, result.stdout, result.stderr
 
 
-def deploy_files():
+def namespace_from_session(session_id):
+    # Kubernetes namespaces must be DNS labels. This keeps the user-facing
+    # session id flexible while making the cluster resource name safe.
+    normalized = re.sub(r"[^a-z0-9-]+", "-", (session_id or "default").lower())
+    normalized = re.sub(r"-+", "-", normalized).strip("-")
+    if not normalized:
+        normalized = "default"
+    return f"tfm-{normalized}"[:63].rstrip("-")
+
+
+def ensure_namespace(namespace):
+    code, out, err = run_command(["kubectl", "get", "namespace", namespace])
+    if code == 0:
+        return True, out
+
+    code, out, err = run_command(["kubectl", "create", "namespace", namespace])
+    if code != 0:
+        return False, err if err else out
+
+    return True, out
+
+
+def deploy_files(session_id="default"):
     # AGENTE DE EJECUCIÓN REAL
     # Aplica los YAMLs al cluster con kubectl
 
     success = True
     combined_output = []
+    namespace = namespace_from_session(session_id)
+
+    namespace_ready, namespace_output = ensure_namespace(namespace)
+    if namespace_output:
+        combined_output.append(namespace_output)
+    if not namespace_ready:
+        return False, "\n".join(combined_output)
 
     # Siempre aplicas deployment + service
     files_to_apply = ["deployment.yaml", "service.yaml"]
@@ -38,7 +68,9 @@ def deploy_files():
 
     # Ejecuta kubectl apply para cada YAML
     for file_name in files_to_apply:
-        code, out, err = run_command(["kubectl", "apply", "-f", file_name])
+        code, out, err = run_command(
+            ["kubectl", "apply", "-n", namespace, "-f", file_name]
+        )
 
         if out:
             print(out)
@@ -55,7 +87,7 @@ def deploy_files():
     return success, "\n".join(combined_output)
 
 
-def get_pods_output(app_name):
+def get_pods_output(app_name, session_id="default"):
     # MONITORING
     # Obtiene los pods de tu app
 
@@ -64,6 +96,8 @@ def get_pods_output(app_name):
             "kubectl",
             "get",
             "pods",
+            "-n",
+            namespace_from_session(session_id),
             "-l",
             f"app={app_name}",  # selector por label
             "--no-headers",
@@ -76,7 +110,7 @@ def get_pods_output(app_name):
     return True, out
 
 
-def get_first_pod_name(app_name):
+def get_first_pod_name(app_name, session_id="default"):
     # UTILIDAD INTERNA
     # Saca el nombre del primer pod
 
@@ -85,6 +119,8 @@ def get_first_pod_name(app_name):
             "kubectl",
             "get",
             "pods",
+            "-n",
+            namespace_from_session(session_id),
             "-l",
             f"app={app_name}",
             "-o",
@@ -98,14 +134,16 @@ def get_first_pod_name(app_name):
     return True, out.strip()
 
 
-def get_pod_logs(app_name):
+def get_pod_logs(app_name, session_id="default"):
     # OBSERVABILIDAD: logs
 
-    ok, pod_name = get_first_pod_name(app_name)
+    ok, pod_name = get_first_pod_name(app_name, session_id)
     if not ok:
         return False, pod_name
 
-    code, out, err = run_command(["kubectl", "logs", pod_name])
+    code, out, err = run_command(
+        ["kubectl", "logs", "-n", namespace_from_session(session_id), pod_name]
+    )
 
     if code != 0:
         return False, err if err else out
@@ -113,14 +151,23 @@ def get_pod_logs(app_name):
     return True, out
 
 
-def describe_pod(app_name):
+def describe_pod(app_name, session_id="default"):
     # OBSERVABILIDAD: describe
 
-    ok, pod_name = get_first_pod_name(app_name)
+    ok, pod_name = get_first_pod_name(app_name, session_id)
     if not ok:
         return False, pod_name
 
-    code, out, err = run_command(["kubectl", "describe", "pod", pod_name])
+    code, out, err = run_command(
+        [
+            "kubectl",
+            "describe",
+            "pod",
+            "-n",
+            namespace_from_session(session_id),
+            pod_name,
+        ]
+    )
 
     if code != 0:
         return False, err if err else out
@@ -128,7 +175,7 @@ def describe_pod(app_name):
     return True, out
 
 
-def scale_deployment(app_name, replicas):
+def scale_deployment(app_name, replicas, session_id="default"):
     # ESCALADO dinámico
 
     code, out, err = run_command(
@@ -136,6 +183,8 @@ def scale_deployment(app_name, replicas):
             "kubectl",
             "scale",
             "deployment",
+            "-n",
+            namespace_from_session(session_id),
             f"{app_name}-deployment",
             f"--replicas={replicas}",
         ]
@@ -147,11 +196,18 @@ def scale_deployment(app_name, replicas):
     return True, out
 
 
-def get_deployment_status(app_name):
+def get_deployment_status(app_name, session_id="default"):
     # CONSULTAR estado del deployment
 
     code, out, err = run_command(
-        ["kubectl", "get", "deployment", f"{app_name}-deployment"]
+        [
+            "kubectl",
+            "get",
+            "deployment",
+            "-n",
+            namespace_from_session(session_id),
+            f"{app_name}-deployment",
+        ]
     )
 
     if code != 0:
@@ -160,31 +216,66 @@ def get_deployment_status(app_name):
     return True, out
 
 
-def delete_app_resources(app_name):
+def delete_app_resources(app_name, session_id="default"):
     # LIMPIEZA TOTAL
     # Borra todos los recursos asociados a la app
+    namespace = namespace_from_session(session_id)
+    outputs = []
 
-    run_command(
+    code, out, err = run_command(
         [
             "kubectl",
             "delete",
             "deployment",
+            "-n",
+            namespace,
             f"{app_name}-deployment",
             "--ignore-not-found",  # evita errores si no existe
         ]
     )
+    outputs.extend([text for text in [out, err] if text])
 
-    run_command(
-        ["kubectl", "delete", "service", f"{app_name}-service", "--ignore-not-found"]
+    code, out, err = run_command(
+        [
+            "kubectl",
+            "delete",
+            "service",
+            "-n",
+            namespace,
+            f"{app_name}-service",
+            "--ignore-not-found",
+        ]
     )
+    outputs.extend([text for text in [out, err] if text])
 
-    run_command(
-        ["kubectl", "delete", "configmap", f"{app_name}-config", "--ignore-not-found"]
+    code, out, err = run_command(
+        [
+            "kubectl",
+            "delete",
+            "configmap",
+            "-n",
+            namespace,
+            f"{app_name}-config",
+            "--ignore-not-found",
+        ]
     )
+    outputs.extend([text for text in [out, err] if text])
 
-    run_command(
-        ["kubectl", "delete", "ingress", f"{app_name}-ingress", "--ignore-not-found"]
+    code, out, err = run_command(
+        [
+            "kubectl",
+            "delete",
+            "ingress",
+            "-n",
+            namespace,
+            f"{app_name}-ingress",
+            "--ignore-not-found",
+        ]
     )
+    outputs.extend([text for text in [out, err] if text])
+
+    combined_output = "\n".join(outputs)
+    return "deleted" in combined_output.lower(), combined_output
 
 
 def get_cluster_nodes():

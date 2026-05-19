@@ -1,19 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: nginx-deployment
+  name: apache-deployment
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: nginx
+      app: apache
   template:
     metadata:
       labels:
-        app: nginx
+        app: apache
     spec:
       containers:
-      - name: nginx
-        image: nginx
+      - name: apache
+        image: mcr.microsoft.com/oss/nginx/nginx:1.15.5-alpine
         ports:
         - containerPort: 80

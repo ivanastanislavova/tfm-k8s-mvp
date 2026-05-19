@@ -49,6 +49,8 @@ from k8s.k8s_utils import (
     get_deployment_status,
     get_pod_logs,
     describe_pod,
+    ensure_namespace,
+    namespace_from_session,
 )
 
 # Funciones auxiliares que interactúan con Kubernetes usando kubectl.
@@ -240,7 +242,7 @@ def deploy_node(state: AgentState):
     # Agente de ejecución.
     # Se encarga de aplicar los manifiestos al clúster usando kubectl.
 
-    success, output = deploy_files()
+    success, output = deploy_files(state["session_id"])
 
     state["history"].append(
         f"Execution: intento de despliegue app={state['app_name']}, image={state['image']}, replicas={state['replicas']}, port={state['port']}, service_type={state['service_type']}"
@@ -263,7 +265,9 @@ def scale_node(state: AgentState):
     print("\n[AGENT] Scale Agent\n")
     # Agente especializado para escalar una aplicación ya existente.
 
-    success, output = scale_deployment(state["app_name"], state["replicas"])
+    success, output = scale_deployment(
+        state["app_name"], state["replicas"], state["session_id"]
+    )
     print(output)
 
     if not success:
@@ -285,10 +289,20 @@ def delete_node(state: AgentState):
     print("\n[AGENT] Delete Agent\n")
     # Agente que elimina todos los recursos asociados a la app.
 
-    delete_app_resources(state["app_name"])
-    state["diagnosis"] = "deleted"
-    state["reason"] = "resources deleted"
-    state["history"].append(f"Delete: recursos de {state['app_name']} eliminados")
+    deleted, output = delete_app_resources(state["app_name"], state["session_id"])
+    state["observation"] = output
+
+    if deleted:
+        state["diagnosis"] = "deleted"
+        state["reason"] = "resources deleted"
+        state["history"].append(f"Delete: recursos de {state['app_name']} eliminados")
+    else:
+        state["diagnosis"] = "not_found"
+        state["reason"] = "resources not found in this session namespace"
+        state["history"].append(
+            f"Delete: no hay recursos de {state['app_name']} en esta sesión"
+        )
+
     return state
 
 
@@ -296,7 +310,7 @@ def delete_node(state: AgentState):
 def status_node(state: AgentState):
     print("\n[AGENT] Status Agent\n")
 
-    success, output = get_deployment_status(state["app_name"])
+    success, output = get_deployment_status(state["app_name"], state["session_id"])
     print(output)
 
     state["observation"] = output
@@ -354,7 +368,7 @@ def observe_node(state: AgentState):
     final_output = ""
 
     for attempt in range(max_attempts):
-        success, output = get_pods_output(state["app_name"])
+        success, output = get_pods_output(state["app_name"], state["session_id"])
         final_output = output
 
         print(output)
@@ -538,7 +552,7 @@ def repair_node(state: AgentState):
                 state["app_name"] = candidate
             # Ojo: aquí además cambiamos app_name para mantener coherencia de labels/recursos
 
-            delete_app_resources(old_app_name)
+            delete_app_resources(old_app_name, state["session_id"])
             # Borramos recursos antiguos antes de redeploy
 
             state["retries"] += 1
@@ -589,7 +603,7 @@ def repair_node(state: AgentState):
         state["image"] = new_image
         state["replicas"] = new_replicas
 
-        delete_app_resources(old_app_name)
+        delete_app_resources(old_app_name, state["session_id"])
 
         state["retries"] += 1
         state["history"].append(
@@ -636,7 +650,7 @@ def show_logs_node(state: AgentState):
     print("\n[AGENT] Logs Agent\n")
     # Observabilidad: consulta logs del pod activo
 
-    success, output = get_pod_logs(state["app_name"])
+    success, output = get_pod_logs(state["app_name"], state["session_id"])
     print(output)
 
     state["logs_output"] = output
@@ -659,7 +673,7 @@ def describe_pod_node(state: AgentState):
     print("\n[AGENT] Describe Agent\n")
     # Observabilidad: describe del pod activo
 
-    success, output = describe_pod(state["app_name"])
+    success, output = describe_pod(state["app_name"], state["session_id"])
     print(output)
 
     state["describe_output"] = output
@@ -914,10 +928,27 @@ def generate_llm_yaml_node(state: AgentState):
 @timed_node("deploy_llm_yaml")
 def deploy_llm_yaml_node(state: AgentState):
     print("\n[AGENT] LLM YAML Execution Agent\n")
+    namespace = namespace_from_session(state["session_id"])
+    namespace_ready, namespace_output = ensure_namespace(namespace)
+
+    if not namespace_ready:
+        state["has_error"] = True
+        state["diagnosis"] = "deployment_failed"
+        state["reason"] = "namespace creation failed"
+        state["observation"] = namespace_output
+        state["history"].append("LLM YAML Execution: namespace creation failed")
+        return state
 
     dry_run = subprocess.run(
-        "kubectl apply --dry-run=client -f llm_generated.yaml",
-        shell=True,
+        [
+            "kubectl",
+            "apply",
+            "--dry-run=client",
+            "-n",
+            namespace,
+            "-f",
+            "llm_generated.yaml",
+        ],
         capture_output=True,
         text=True,
     )
@@ -931,8 +962,7 @@ def deploy_llm_yaml_node(state: AgentState):
         return state
 
     result = subprocess.run(
-        "kubectl apply -f llm_generated.yaml",
-        shell=True,
+        ["kubectl", "apply", "-n", namespace, "-f", "llm_generated.yaml"],
         capture_output=True,
         text=True,
     )
