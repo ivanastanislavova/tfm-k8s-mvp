@@ -1,9 +1,15 @@
 {
   "provider": "minikube",
+  "profile": "kaf-cluster4",
+  "context": "kaf-cluster4",
   "cluster": "local",
   "ssh_user": "",
   "master": {
-    "host": "minikube"
+    "host": "kaf-cluster4"
   },
-  "workers": []
+  "workers": [
+    {
+      "host": "kaf-cluster4-m02"
+    }
+  ]
 }

@@ -142,6 +142,7 @@ def deploy(request: DeployRequest):
             "add_config",
             "enable_ingress",
             "disable_ingress",
+            "create_cluster",
         ]:
             conversation_manager.update_context_from_parsed(session_id, final_state)
 
@@ -158,6 +159,7 @@ def deploy(request: DeployRequest):
                 "ingress_host": "",
                 "masters": 1,
                 "workers": 1,
+                "provider": "minikube",
                 "last_intent": "",
                 "last_observation": "",
                 "last_reason": "",

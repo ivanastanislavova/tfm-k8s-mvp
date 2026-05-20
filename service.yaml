@@ -1,10 +1,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: apache-service
+  name: httpd-service
 spec:
   selector:
-    app: apache
+    app: httpd
   ports:
   - protocol: TCP
     port: 80

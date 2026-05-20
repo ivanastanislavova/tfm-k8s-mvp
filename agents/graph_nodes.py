@@ -9,6 +9,7 @@ Incluye:
 Cada nodo representa una acción del sistema.
 """
 
+import json
 import os
 
 import time
@@ -39,7 +40,12 @@ from llm.llm_provider import get_llm
 
 # Función que genera YAMLs usando un LLM (opcional, no determinista).
 
-from provisioning.cloud_provisioner import provision_infrastructure
+from provisioning.cloud_provisioner import (
+    minikube_profile_from_session,
+    read_minikube_status,
+    provision_infrastructure,
+    write_minikube_status,
+)
 
 from core.metrics import timed_node
 
@@ -54,6 +60,8 @@ from k8s.k8s_utils import (
     list_deployments,
     get_service_details,
     get_deployment_container_port,
+    get_cluster_nodes,
+    get_kubectl_context,
     ensure_namespace,
     namespace_from_session,
 )
@@ -926,27 +934,33 @@ def cluster_status_node(state: AgentState):
     print("\n[AGENT] Cluster Status Agent\n")
 
     provider = state.get("provider", "minikube")
+    profile = get_kubectl_context(state["session_id"])
 
     try:
-        if provider == "minikube":
-            result = subprocess.run(
-                "kubectl get nodes", capture_output=True, text=True, shell=True
+        success, output = get_cluster_nodes(state["session_id"])
+        job_status = read_minikube_status(minikube_profile_from_session(state["session_id"]))
+
+        if job_status:
+            output += "\n\nProvisioning job status:\n"
+            output += json.dumps(job_status, indent=2)
+
+        state["observation"] = output
+
+        if job_status.get("status") == "running":
+            state["has_error"] = False
+            state["diagnosis"] = "cluster_creating"
+            state["reason"] = f"Cluster profile {profile} is still being created"
+        elif success and " Ready" in output:
+            state["has_error"] = False
+            state["diagnosis"] = "healthy"
+            state["reason"] = f"Cluster reachable using provider={provider}, profile={profile}"
+        else:
+            state["has_error"] = True
+            state["diagnosis"] = "unhealthy"
+            state["reason"] = (
+                f"The cluster profile {profile} is not reachable or no node is Ready"
             )
 
-            output = result.stdout + result.stderr
-
-            state["observation"] = output
-
-            if "Ready" in output:
-                state["diagnosis"] = "healthy"
-                state["reason"] = "Minikube cluster funcionando correctamente"
-            else:
-                state["diagnosis"] = "unhealthy"
-                state["reason"] = "El cluster no está listo"
-
-        else:
-            # tu lógica actual de Oracle
-            pass
 
         state["history"].append("Cluster Status: comprobación realizada")
 
@@ -1006,6 +1020,8 @@ def cloud_provision_node(state: AgentState):
         "provider": provider,
         "masters": state["masters"],
         "workers": state["workers"],
+        "session_id": state["session_id"],
+        "profile": minikube_profile_from_session(state["session_id"]),
         "ssh_user": "ubuntu",
         "cpus": 2,
         "memory": 4096,
@@ -1026,6 +1042,15 @@ def cloud_provision_node(state: AgentState):
         )
 
     except Exception as e:
+        if provider == "minikube":
+            write_minikube_status(
+                params["profile"],
+                {
+                    "status": "failed",
+                    "message": str(e),
+                    "logs": str(e),
+                },
+            )
         state["has_error"] = True
         state["diagnosis"] = "infrastructure_failed"
         state["reason"] = str(e)

@@ -15,6 +15,7 @@ DEFAULT_CONTEXT = {
     "ingress_host": "",
     "masters": 1,
     "workers": 1,
+    "provider": "minikube",
     "last_intent": "",
     "last_observation": "",
     "last_reason": "",
@@ -77,6 +78,7 @@ class ConversationManager:
             "ingress_host",
             "masters",
             "workers",
+            "provider",
         ]:
             if key not in parsed:
                 continue
@@ -121,7 +123,7 @@ class ConversationManager:
             # =========================
             # STRINGS
             # =========================
-            if key in ["app_name", "image", "service_type"]:
+            if key in ["app_name", "image", "service_type", "provider"]:
                 if value not in ["", None]:
                     context[key] = value
                 continue
@@ -153,6 +155,7 @@ class ConversationManager:
             "ingress_host",
             "masters",
             "workers",
+            "provider",
         ]:
 
             if key not in completed:
@@ -165,7 +168,7 @@ class ConversationManager:
             # =========================
             # STRINGS
             # =========================
-            if key in ["app_name", "image", "service_type", "ingress_host"]:
+            if key in ["app_name", "image", "service_type", "ingress_host", "provider"]:
                 if value in ["", None]:
                     completed[key] = deepcopy(context[key])
                 continue

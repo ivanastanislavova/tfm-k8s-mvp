@@ -140,8 +140,10 @@
       border-radius: 999px;
       font-size: 13px;
       font-weight: 800;
+      font-family: inherit;
       white-space: nowrap;
       border: 1px solid #bbf7d0;
+      cursor: pointer;
     }
 
     .cards {
@@ -206,6 +208,50 @@
       color: #16a34a;
       font-weight: 800;
     }
+
+    .cluster-summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .cluster-kpi {
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 12px;
+      background: #f8fafc;
+      min-width: 0;
+    }
+
+    .cluster-kpi span {
+      display: block;
+      color: #64748b;
+      font-size: 12px;
+      font-weight: 800;
+      margin-bottom: 5px;
+    }
+
+    .cluster-kpi strong {
+      display: block;
+      font-size: 18px;
+      overflow-wrap: anywhere;
+    }
+
+    .cluster-table {
+      table-layout: fixed;
+    }
+
+    .cluster-table th,
+    .cluster-table td {
+      white-space: nowrap;
+    }
+
+    .cluster-table th:nth-child(1), .cluster-table td:nth-child(1) { width: 26%; }
+    .cluster-table th:nth-child(2), .cluster-table td:nth-child(2) { width: 14%; }
+    .cluster-table th:nth-child(3), .cluster-table td:nth-child(3) { width: 18%; }
+    .cluster-table th:nth-child(4), .cluster-table td:nth-child(4) { width: 16%; }
+    .cluster-table th:nth-child(5), .cluster-table td:nth-child(5) { width: 26%; }
 
     .section {
       border-radius: 20px;
@@ -454,6 +500,7 @@
         <img src="/app/assets/kubeagentflow.png" alt="KubeAgentFlow" />
       </a>
       <button class="nav-item active" data-target="overviewSection" onclick="goToSection('overviewSection')">Overview</button>
+      <button class="nav-item" data-target="clusterSection" onclick="goToSection('clusterSection')">Cluster</button>
       <button class="nav-item" data-target="outputsSection" onclick="goToSection('outputsSection')">Outputs</button>
       <button class="nav-item" data-target="metricsSection" onclick="goToSection('metricsSection')">Metrics</button>
 
@@ -471,7 +518,7 @@
           <h1>Overview</h1>
           <p>Live summary of your Kubernetes environment and last agentic operation.</p>
         </div>
-        <span class="badge" id="clusterStatus">● Cluster connected</span>
+        <button class="badge" id="clusterStatus" onclick="requestClusterStatus()">● Cluster connected</button>
       </div>
 
       <div class="cards">
@@ -496,6 +543,42 @@
           <div class="hint" id="serviceHint">No service exposed</div>
         </div>
       </div>
+
+      <section class="section" id="clusterSection">
+        <h2>Cluster Information</h2>
+        <div class="cluster-summary">
+          <div class="cluster-kpi">
+            <span>Profile</span>
+            <strong id="clusterProfile">—</strong>
+          </div>
+          <div class="cluster-kpi">
+            <span>Status</span>
+            <strong id="clusterHealth">Unknown</strong>
+          </div>
+          <div class="cluster-kpi">
+            <span>Ready nodes</span>
+            <strong id="clusterReadyNodes">—</strong>
+          </div>
+          <div class="cluster-kpi">
+            <span>Provider</span>
+            <strong id="clusterProvider">—</strong>
+          </div>
+        </div>
+        <table class="cluster-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Status</th>
+              <th>Role</th>
+              <th>Version</th>
+              <th>Internal IP</th>
+            </tr>
+          </thead>
+          <tbody id="clusterNodeTable">
+            <tr><td colspan="5">Click Cluster connected to inspect nodes.</td></tr>
+          </tbody>
+        </table>
+      </section>
 
       <section class="section" id="workloadsSection">
         <h2>Current Workload</h2>
@@ -591,6 +674,19 @@
       return `dashboard_state_${currentSessionId}`;
     }
 
+    function getClusterKey() {
+      return `cluster_state_${currentSessionId}`;
+    }
+
+    function expectedClusterProfile() {
+      const normalized = String(currentSessionId || "default")
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "") || "default";
+      return `kaf-${normalized}`.slice(0, 40).replace(/-$/g, "");
+    }
+
     function getWorkloadsKey() {
       return `workloads_${currentSessionId}`;
     }
@@ -684,6 +780,8 @@
       if (!data) return;
       if (["list_deployments", "answer_contextual_question", "answer_question", "cluster_status", "show_app_port"].includes(data.intent)) return;
       if (data.app_name === "cluster") return;
+      if (data.diagnosis && data.diagnosis.endsWith("_failed")) return;
+      if (data.has_error) return;
 
       if (data.intent === "delete") {
         if (data.diagnosis !== "deleted") return;
@@ -757,6 +855,29 @@
     function saveDashboardState(data) {
       if (!currentSessionId) return;
       localStorage.setItem(getDashboardKey(), JSON.stringify(data));
+    }
+
+    function saveClusterState(data) {
+      if (!currentSessionId) return;
+      localStorage.setItem(getClusterKey(), JSON.stringify(data));
+    }
+
+    function loadClusterState() {
+      if (!currentSessionId) return;
+      const saved = localStorage.getItem(getClusterKey());
+      if (!saved) return;
+
+      try {
+        const data = JSON.parse(saved);
+        const profile = extractClusterProfile(data);
+        if (profile.startsWith("kaf-") && profile !== expectedClusterProfile()) {
+          localStorage.removeItem(getClusterKey());
+          return;
+        }
+        renderClusterInfo(data);
+      } catch (error) {
+        localStorage.removeItem(getClusterKey());
+      }
     }
 
     function initSession() {
@@ -846,6 +967,7 @@
     function initSectionNavigation() {
       const sections = [
         "overviewSection",
+        "clusterSection",
         "outputsSection",
         "metricsSection"
       ]
@@ -908,6 +1030,69 @@
       renderMetrics(data);
     }
 
+    function extractClusterProfile(data) {
+      const text = [data.reason, data.observation].filter(Boolean).join("\n");
+      const profileMatch = text.match(/profile=([a-zA-Z0-9-]+)/);
+      if (profileMatch) return profileMatch[1];
+
+      const nodeLine = String(data.observation || "")
+        .split("\n")
+        .find(line => /^kaf-|^minikube/.test(line.trim()));
+      return nodeLine ? nodeLine.trim().split(/\s+/)[0] : "—";
+    }
+
+    function parseClusterNodes(output) {
+      const lines = String(output || "")
+        .split("\n")
+        .map(line => line.trim())
+        .filter(Boolean);
+
+      return lines
+        .filter(line => /^(kaf-|minikube)/.test(line))
+        .map(line => {
+          const parts = line.split(/\s+/);
+          return {
+            name: parts[0] || "—",
+            status: parts[1] || "—",
+            role: parts[2] || "—",
+            age: parts[3] || "—",
+            version: parts[4] || "—",
+            internalIp: parts[5] || "—"
+          };
+        });
+    }
+
+    function renderClusterInfo(data) {
+      const nodes = parseClusterNodes(data.observation || "");
+      const readyCount = nodes.filter(node => node.status === "Ready").length;
+      const profile = extractClusterProfile(data);
+      const providerMatch = String(data.reason || "").match(/provider=([a-zA-Z0-9-]+)/);
+      const provider = providerMatch ? providerMatch[1] : (data.provider || "minikube");
+
+      document.getElementById("clusterProfile").textContent = profile;
+      document.getElementById("clusterProvider").textContent = provider;
+      document.getElementById("clusterReadyNodes").textContent =
+        nodes.length ? `${readyCount}/${nodes.length}` : "—";
+      document.getElementById("clusterHealth").textContent =
+        data.diagnosis === "healthy" ? "Healthy" :
+        data.diagnosis === "cluster_creating" ? "Creating" :
+        data.diagnosis || "Unknown";
+
+      document.getElementById("clusterNodeTable").innerHTML = nodes.length
+        ? nodes.map(node => `
+          <tr>
+            <td>${escapeHtml(node.name)}</td>
+            <td class="status-ok">${escapeHtml(node.status)}</td>
+            <td>${escapeHtml(node.role)}</td>
+            <td>${escapeHtml(node.version)}</td>
+            <td>${escapeHtml(node.internalIp)}</td>
+          </tr>
+        `).join("")
+        : `<tr><td colspan="5">No cluster nodes found in the latest response.</td></tr>`;
+
+      saveClusterState(data);
+    }
+
     function updateDashboard(data) {
       if (!isValidDashboardData(data)) {
         document.getElementById("terminalOutput").textContent =
@@ -929,10 +1114,13 @@
         return;
       }
 
-      if (["list_deployments", "answer_contextual_question", "answer_question", "cluster_status", "show_app_port"].includes(data.intent)) {
+      if (["list_deployments", "answer_contextual_question", "answer_question", "cluster_status", "show_app_port", "create_cluster"].includes(data.intent)) {
         workloadsBySession = workloadsBySession.filter(item => item.app_name !== "cluster");
         saveWorkloads();
         renderWorkloads();
+        if (["cluster_status", "create_cluster"].includes(data.intent)) {
+          renderClusterInfo(data);
+        }
         document.getElementById("terminalOutput").textContent =
           data.observation ||
           data.reason ||
@@ -1026,6 +1214,50 @@
       }
     }
 
+    async function requestClusterStatus() {
+      if (!currentSessionId) {
+        alert("Please assign a session ID before checking the cluster.");
+        setSession();
+        return;
+      }
+
+      const llm_model = document.getElementById("llm_model").value;
+      const generation_mode = document.getElementById("generation_mode").value;
+      const session_id = currentSessionId;
+      const selected_workload =
+        workloadsBySession.find((item) => item.app_name === selectedWorkloadName) ||
+        lastValidDashboardState ||
+        {};
+
+      addMessage("Checking cluster status...", "assistant");
+
+      try {
+        const res = await fetch("http://127.0.0.1:8000/deploy", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: "cluster status",
+            session_id,
+            llm_model,
+            generation_mode,
+            selected_workload
+          })
+        });
+
+        const data = await res.json();
+        data.input = "cluster status";
+        updateDashboard(data);
+
+        addMessage(
+          `<b>${escapeHtml(data.diagnosis || "Cluster status")}</b><br>${escapeHtml(data.reason || "Cluster status checked.")}`,
+          "assistant"
+        );
+      } catch (error) {
+        addMessage("Backend connection error. Check that FastAPI is running.", "assistant");
+        document.getElementById("terminalOutput").textContent = error;
+      }
+    }
+
     document.getElementById("input").addEventListener("keydown", function(e) {
       if (e.key === "Enter") sendPrompt();
     });
@@ -1062,6 +1294,8 @@
         resetDashboard();
         renderWorkloads();
       }
+
+      loadClusterState();
     }
 
     function resetDashboard() {
@@ -1075,6 +1309,15 @@
 
       document.getElementById("terminalOutput").textContent = "Waiting for user request...";
       document.getElementById("yamlPreview").textContent = "No YAML generated yet.";
+      document.getElementById("clusterProfile").textContent = "—";
+      document.getElementById("clusterHealth").textContent = "Unknown";
+      document.getElementById("clusterReadyNodes").textContent = "—";
+      document.getElementById("clusterProvider").textContent = "—";
+      document.getElementById("clusterNodeTable").innerHTML =
+        `<tr><td colspan="5">Click Cluster connected to inspect nodes.</td></tr>`;
+      if (currentSessionId) {
+        localStorage.removeItem(getClusterKey());
+      }
 
       document.getElementById("metricsTable").innerHTML = `
         <tr>
@@ -1088,6 +1331,7 @@
     window.clearCurrentSession = clearCurrentSession;
     window.scrollChatToTop = scrollChatToTop;
     window.sendPrompt = sendPrompt;
+    window.requestClusterStatus = requestClusterStatus;
 
     initSession();
     initSectionNavigation();

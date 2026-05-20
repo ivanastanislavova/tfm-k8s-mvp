@@ -16,10 +16,37 @@ def run_command(command):
         command,
         capture_output=True,  # Captura stdout y stderr
         text=True,  # Devuelve strings en vez de bytes
+        encoding="utf-8",
+        errors="replace",
+        timeout=60,
     )
 
     # returncode → 0 = OK, !=0 = error
     return result.returncode, result.stdout, result.stderr
+
+
+def minikube_profile_from_session(session_id):
+    normalized = re.sub(r"[^a-z0-9-]+", "-", (session_id or "default").lower())
+    normalized = re.sub(r"-+", "-", normalized).strip("-") or "default"
+    return f"kaf-{normalized}"[:40].rstrip("-")
+
+
+def kubectl_context_exists(context):
+    code, out, _ = run_command(["kubectl", "config", "get-contexts", "-o", "name"])
+    if code != 0:
+        return False
+    return context in [line.strip() for line in out.splitlines()]
+
+
+def get_kubectl_context(session_id="default"):
+    session_profile = minikube_profile_from_session(session_id)
+    if kubectl_context_exists(session_profile):
+        return session_profile
+    return "minikube"
+
+
+def kubectl_command(session_id, *args):
+    return ["kubectl", "--context", get_kubectl_context(session_id), *args]
 
 
 def namespace_from_session(session_id):
@@ -32,12 +59,12 @@ def namespace_from_session(session_id):
     return f"tfm-{normalized}"[:63].rstrip("-")
 
 
-def ensure_namespace(namespace):
-    code, out, err = run_command(["kubectl", "get", "namespace", namespace])
+def ensure_namespace(namespace, session_id="default"):
+    code, out, err = run_command(kubectl_command(session_id, "get", "namespace", namespace))
     if code == 0:
         return True, out
 
-    code, out, err = run_command(["kubectl", "create", "namespace", namespace])
+    code, out, err = run_command(kubectl_command(session_id, "create", "namespace", namespace))
     if code != 0:
         return False, err if err else out
 
@@ -52,7 +79,7 @@ def deploy_files(session_id="default"):
     combined_output = []
     namespace = namespace_from_session(session_id)
 
-    namespace_ready, namespace_output = ensure_namespace(namespace)
+    namespace_ready, namespace_output = ensure_namespace(namespace, session_id)
     if namespace_output:
         combined_output.append(namespace_output)
     if not namespace_ready:
@@ -74,7 +101,7 @@ def deploy_files(session_id="default"):
     # Ejecuta kubectl apply para cada YAML
     for file_name in files_to_apply:
         code, out, err = run_command(
-            ["kubectl", "apply", "-n", namespace, "-f", str(file_name)]
+            kubectl_command(session_id, "apply", "-n", namespace, "-f", str(file_name))
         )
 
         if out:
@@ -98,7 +125,7 @@ def get_pods_output(app_name, session_id="default"):
 
     code, out, err = run_command(
         [
-            "kubectl",
+            *kubectl_command(session_id),
             "get",
             "pods",
             "-n",
@@ -121,7 +148,7 @@ def get_first_pod_name(app_name, session_id="default"):
 
     code, out, err = run_command(
         [
-            "kubectl",
+            *kubectl_command(session_id),
             "get",
             "pods",
             "-n",
@@ -147,7 +174,7 @@ def get_pod_logs(app_name, session_id="default"):
         return False, pod_name
 
     code, out, err = run_command(
-        ["kubectl", "logs", "-n", namespace_from_session(session_id), pod_name]
+        kubectl_command(session_id, "logs", "-n", namespace_from_session(session_id), pod_name)
     )
 
     if code != 0:
@@ -165,7 +192,7 @@ def describe_pod(app_name, session_id="default"):
 
     code, out, err = run_command(
         [
-            "kubectl",
+            *kubectl_command(session_id),
             "describe",
             "pod",
             "-n",
@@ -185,7 +212,7 @@ def scale_deployment(app_name, replicas, session_id="default"):
 
     code, out, err = run_command(
         [
-            "kubectl",
+            *kubectl_command(session_id),
             "scale",
             "deployment",
             "-n",
@@ -206,7 +233,7 @@ def get_deployment_status(app_name, session_id="default"):
 
     code, out, err = run_command(
         [
-            "kubectl",
+            *kubectl_command(session_id),
             "get",
             "deployment",
             "-n",
@@ -224,7 +251,7 @@ def get_deployment_status(app_name, session_id="default"):
 def list_deployments(session_id="default"):
     namespace = namespace_from_session(session_id)
     code, out, err = run_command(
-        ["kubectl", "get", "deployments", "-n", namespace, "--no-headers"]
+        kubectl_command(session_id, "get", "deployments", "-n", namespace, "--no-headers")
     )
 
     if code != 0:
@@ -236,7 +263,7 @@ def list_deployments(session_id="default"):
 def get_service_details(app_name, session_id="default"):
     code, out, err = run_command(
         [
-            "kubectl",
+            *kubectl_command(session_id),
             "get",
             "service",
             "-n",
@@ -256,7 +283,7 @@ def get_service_details(app_name, session_id="default"):
 def get_deployment_container_port(app_name, session_id="default"):
     code, out, err = run_command(
         [
-            "kubectl",
+            *kubectl_command(session_id),
             "get",
             "deployment",
             "-n",
@@ -281,7 +308,7 @@ def delete_app_resources(app_name, session_id="default"):
 
     code, out, err = run_command(
         [
-            "kubectl",
+            *kubectl_command(session_id),
             "delete",
             "deployment",
             "-n",
@@ -294,7 +321,7 @@ def delete_app_resources(app_name, session_id="default"):
 
     code, out, err = run_command(
         [
-            "kubectl",
+            *kubectl_command(session_id),
             "delete",
             "service",
             "-n",
@@ -307,7 +334,7 @@ def delete_app_resources(app_name, session_id="default"):
 
     code, out, err = run_command(
         [
-            "kubectl",
+            *kubectl_command(session_id),
             "delete",
             "configmap",
             "-n",
@@ -320,7 +347,7 @@ def delete_app_resources(app_name, session_id="default"):
 
     code, out, err = run_command(
         [
-            "kubectl",
+            *kubectl_command(session_id),
             "delete",
             "ingress",
             "-n",
@@ -335,8 +362,8 @@ def delete_app_resources(app_name, session_id="default"):
     return "deleted" in combined_output.lower(), combined_output
 
 
-def get_cluster_nodes():
-    code, out, err = run_command(["kubectl", "get", "nodes", "-o", "wide"])
+def get_cluster_nodes(session_id="default"):
+    code, out, err = run_command(kubectl_command(session_id, "get", "nodes", "-o", "wide"))
 
     if code != 0:
         return False, err if err else out
@@ -344,8 +371,8 @@ def get_cluster_nodes():
     return True, out
 
 
-def get_cluster_pods():
-    code, out, err = run_command(["kubectl", "get", "pods", "-A"])
+def get_cluster_pods(session_id="default"):
+    code, out, err = run_command(kubectl_command(session_id, "get", "pods", "-A"))
 
     if code != 0:
         return False, err if err else out

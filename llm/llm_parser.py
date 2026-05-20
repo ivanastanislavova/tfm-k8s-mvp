@@ -202,7 +202,10 @@ def rule_based_parse(user_text: str):
     # CLUSTER STATUS / HEALTH
     # =========================
     cluster_status_pattern = re.search(
-        r"(?:check|show|get|validate).*(?:cluster).*(?:health|status|nodes|state)|(?:cluster)\s+(?:health|status|nodes|state)",
+        r"(?:check|show|get|validate).*(?:cluster).*(?:health|status|nodes|state)"
+        r"|(?:what|which).*(?:health|status|nodes|state).*(?:cluster)"
+        r"|(?:health|status|nodes|state)\s+(?:of\s+)?(?:the\s+)?cluster"
+        r"|(?:cluster)\s+(?:health|status|nodes|state)",
         text,
         re.IGNORECASE,
     )
@@ -224,22 +227,16 @@ def rule_based_parse(user_text: str):
     # CREATE CLUSTER
     # =========================
     create_cluster_pattern = re.search(
-        r"(?:create|setup|install|provision).*(?:kubernetes|k8s).*(?:cluster)(?:\s+with\s+(\d+)\s+master(?:s)?\s+and\s+(\d+)\s+worker(?:s)?)?",
+        r"(?:create|setup|install|provision).*(?:(?:kubernetes|k8s)\s+)?cluster",
         text,
         re.IGNORECASE,
     )
 
     if create_cluster_pattern:
-        masters = (
-            int(create_cluster_pattern.group(1))
-            if create_cluster_pattern.group(1)
-            else 1
-        )
-        workers = (
-            int(create_cluster_pattern.group(2))
-            if create_cluster_pattern.group(2)
-            else 1
-        )
+        masters_match = re.search(r"(\d+)\s+master(?:s)?", text, re.IGNORECASE)
+        workers_match = re.search(r"(\d+)\s+worker(?:s)?", text, re.IGNORECASE)
+        masters = int(masters_match.group(1)) if masters_match else 1
+        workers = int(workers_match.group(1)) if workers_match else 1
 
         return {
             "intent": "create_cluster",
