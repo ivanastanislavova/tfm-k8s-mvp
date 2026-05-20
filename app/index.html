@@ -485,6 +485,109 @@
     .chat-input input { flex: 1; }
     .chat-input button { min-width: 82px; }
 
+    .session-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.58);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      padding: 24px;
+    }
+
+    .session-modal.open {
+      display: flex;
+    }
+
+    .session-dialog {
+      width: min(520px, 100%);
+      background: white;
+      border-radius: 18px;
+      border: 1px solid #e5e7eb;
+      box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
+      padding: 22px;
+    }
+
+    .session-dialog-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .session-dialog-header h2 {
+      margin: 0;
+      font-size: 22px;
+    }
+
+    .session-close {
+      border: 0;
+      background: #e5e7eb;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 18px;
+      font-weight: 900;
+    }
+
+    .session-list {
+      display: grid;
+      gap: 8px;
+      max-height: 300px;
+      overflow-y: auto;
+      margin-bottom: 16px;
+    }
+
+    .session-choice {
+      border: 1px solid #e5e7eb;
+      background: #f8fafc;
+      border-radius: 12px;
+      padding: 12px 14px;
+      text-align: left;
+      cursor: pointer;
+      font-weight: 900;
+      color: #0f172a;
+    }
+
+    .session-row {
+      display: grid;
+      grid-template-columns: 1fr 42px;
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    .session-delete {
+      border: 1px solid #fecaca;
+      background: #fff1f2;
+      color: #be123c;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 18px;
+      font-weight: 900;
+    }
+
+    .session-delete:hover {
+      background: #ffe4e6;
+    }
+
+    .session-choice.active {
+      border-color: #2563eb;
+      background: #eff6ff;
+      box-shadow: inset 4px 0 0 #2563eb;
+    }
+
+    .session-new-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .session-new-row input {
+      flex: 1;
+    }
+
     @media (max-width: 1300px) {
       .layout { grid-template-columns: 230px minmax(580px, 1fr) 380px; }
       .cards { grid-template-columns: repeat(2, 1fr); }
@@ -649,6 +752,20 @@
         <button onclick="sendPrompt()">Send</button>
       </div>
     </aside>
+  </div>
+
+  <div class="session-modal" id="sessionModal" onclick="closeSessionModal(event)">
+    <div class="session-dialog" onclick="event.stopPropagation()">
+      <div class="session-dialog-header">
+        <h2>Sessions</h2>
+        <button class="session-close" onclick="closeSessionModal()">×</button>
+      </div>
+      <div class="session-list" id="sessionList"></div>
+      <div class="session-new-row">
+        <input id="newSessionInput" placeholder="New session name" onkeydown="if (event.key === 'Enter') createNewSession()" />
+        <button class="session-button" onclick="createNewSession()">New session</button>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -880,6 +997,128 @@
       }
     }
 
+    function getKnownSessions() {
+      const sessions = new Set();
+      const prefixes = [
+        "chat_history_",
+        "dashboard_state_",
+        "workloads_",
+        "cluster_state_"
+      ];
+
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const key = localStorage.key(i);
+        prefixes.forEach(prefix => {
+          if (key && key.startsWith(prefix)) {
+            const sessionId = key.slice(prefix.length);
+            if (sessionId) sessions.add(sessionId);
+          }
+        });
+      }
+
+      if (currentSessionId) sessions.add(currentSessionId);
+      return Array.from(sessions).sort((a, b) => a.localeCompare(b));
+    }
+
+    function switchSession(sessionId) {
+      if (!sessionId || !sessionId.trim()) return;
+      currentSessionId = sessionId.trim();
+      localStorage.setItem("current_session_id", currentSessionId);
+      closeSessionModal();
+      initSession();
+    }
+
+    function renderSessionList() {
+      const sessions = getKnownSessions();
+      const list = document.getElementById("sessionList");
+
+      if (!sessions.length) {
+        list.innerHTML = `<div class="session-empty">No saved sessions yet.</div>`;
+        return;
+      }
+
+      list.innerHTML = sessions.map(sessionId => `
+        <div class="session-row">
+          <button
+            class="session-choice ${sessionId === currentSessionId ? "active" : ""}"
+            data-session="${escapeHtml(sessionId)}"
+            onclick="switchSession(this.dataset.session)"
+          >
+            ${escapeHtml(sessionId)}
+          </button>
+          <button
+            class="session-delete"
+            title="Delete session and resources"
+            data-session="${escapeHtml(sessionId)}"
+            onclick="deleteSessionProfile(this.dataset.session)"
+          >
+            &#128465;
+          </button>
+        </div>
+      `).join("");
+    }
+
+    function openSessionModal() {
+      renderSessionList();
+      document.getElementById("sessionModal").classList.add("open");
+      document.getElementById("newSessionInput").focus();
+    }
+
+    function closeSessionModal(event) {
+      if (event && event.target !== document.getElementById("sessionModal")) return;
+      document.getElementById("sessionModal").classList.remove("open");
+    }
+
+    function createNewSession() {
+      const input = document.getElementById("newSessionInput");
+      const id = input.value.trim();
+      if (!id) return;
+      input.value = "";
+      switchSession(id);
+    }
+
+    function removeLocalSessionData(sessionId) {
+      [
+        `chat_history_${sessionId}`,
+        `dashboard_state_${sessionId}`,
+        `workloads_${sessionId}`,
+        `cluster_state_${sessionId}`
+      ].forEach(key => localStorage.removeItem(key));
+    }
+
+    async function deleteSessionProfile(sessionId) {
+      if (!sessionId) return;
+      const ok = confirm(
+        `Delete session '${sessionId}' and its Kubernetes resources?\n\nThis deletes namespace tfm-${sessionId} and Minikube profile kaf-${sessionId} if they exist.`
+      );
+      if (!ok) return;
+
+      try {
+        const res = await fetch(`http://127.0.0.1:8000/sessions/${encodeURIComponent(sessionId)}`, {
+          method: "DELETE"
+        });
+        const data = await res.json();
+        removeLocalSessionData(sessionId);
+
+        if (currentSessionId === sessionId) {
+          const remaining = getKnownSessions().filter(id => id !== sessionId);
+          currentSessionId = remaining[0] || null;
+          if (currentSessionId) {
+            localStorage.setItem("current_session_id", currentSessionId);
+          } else {
+            localStorage.removeItem("current_session_id");
+          }
+          initSession();
+        }
+
+        renderSessionList();
+        document.getElementById("terminalOutput").textContent =
+          data.observation || data.reason || "Session deleted.";
+      } catch (error) {
+        alert("Could not delete the session. Check that FastAPI is running.");
+      }
+    }
+
     function initSession() {
       const value = document.getElementById("sidebarSessionValue");
 
@@ -901,19 +1140,7 @@
     }
 
     function setSession() {
-      const suggested = currentSessionId || "";
-      const id = prompt("Enter session ID:", suggested);
-      if (!id || !id.trim()) return;
-
-      currentSessionId = id.trim();
-      localStorage.setItem("current_session_id", currentSessionId);
-
-      const value = document.getElementById("sidebarSessionValue");
-      value.textContent = currentSessionId;
-      value.className = "session-active";
-
-      loadChatHistory();
-      loadDashboardState();
+      openSessionModal();
     }
 
     function clearCurrentSession() {
@@ -1328,6 +1555,10 @@
 
     window.goToSection = goToSection;
     window.setSession = setSession;
+    window.switchSession = switchSession;
+    window.closeSessionModal = closeSessionModal;
+    window.createNewSession = createNewSession;
+    window.deleteSessionProfile = deleteSessionProfile;
     window.clearCurrentSession = clearCurrentSession;
     window.scrollChatToTop = scrollChatToTop;
     window.sendPrompt = sendPrompt;

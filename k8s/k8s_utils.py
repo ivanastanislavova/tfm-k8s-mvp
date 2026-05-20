@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+GENERATED_CLUSTER_DIR = PROJECT_ROOT / "provisioning" / "generated_cluster"
 
 # os.environ["KUBECONFIG"] = "C:/tfm-k8s-mvp/config"
 
@@ -378,3 +379,38 @@ def get_cluster_pods(session_id="default"):
         return False, err if err else out
 
     return True, out
+
+
+def cleanup_session_resources(session_id="default"):
+    namespace = namespace_from_session(session_id)
+    profile = minikube_profile_from_session(session_id)
+    outputs = []
+
+    code, out, err = run_command(
+        kubectl_command(session_id, "delete", "namespace", namespace, "--ignore-not-found")
+    )
+    outputs.append(f"=== delete namespace {namespace} ===")
+    outputs.append((out or "") + (err or ""))
+
+    if kubectl_context_exists(profile):
+        result = subprocess.run(
+            ["minikube", "delete", "-p", profile],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=300,
+        )
+        outputs.append(f"=== delete minikube profile {profile} ===")
+        outputs.append((result.stdout or "") + (result.stderr or ""))
+        if result.returncode != 0:
+            return False, "\n".join(outputs)
+    else:
+        outputs.append(f"Minikube profile {profile} not found; skipped.")
+
+    status_path = GENERATED_CLUSTER_DIR / f"{profile}_status.json"
+    if status_path.exists():
+        status_path.unlink()
+        outputs.append(f"Deleted local cluster status file: {status_path}")
+
+    return code == 0, "\n".join(outputs)

@@ -12,6 +12,7 @@ from core.conversation_manager import ConversationManager
 
 from core.metrics import save_evaluation_result
 from fastapi.responses import FileResponse
+from k8s.k8s_utils import cleanup_session_resources
 
 app = FastAPI()
 conversation_manager = ConversationManager()
@@ -37,6 +38,20 @@ class DeployRequest(BaseModel):
 @app.get("/", response_class=FileResponse)
 def home():
     return FileResponse("app/index.html")
+
+
+@app.delete("/sessions/{session_id}")
+def delete_session(session_id: str):
+    success, output = cleanup_session_resources(session_id)
+    conversation_manager.sessions.pop(session_id, None)
+
+    return {
+        "session_id": session_id,
+        "deleted": success,
+        "diagnosis": "session_deleted" if success else "session_delete_failed",
+        "reason": "Session resources cleaned" if success else "Some session resources could not be cleaned",
+        "observation": output,
+    }
 
 
 @app.post("/deploy")
