@@ -46,6 +46,15 @@
       background: rgba(255,255,255,0.07);
       color: #e5e7eb;
       font-weight: 700;
+      cursor: pointer;
+      border: none;
+      display: block;
+      text-align: left;
+      width: 100%;
+    }
+
+    .nav-item:hover {
+      background: rgba(255,255,255,0.12);
     }
 
     .nav-item.active {
@@ -140,6 +149,11 @@
       grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 14px;
       margin-bottom: 18px;
+      scroll-margin-top: 24px;
+    }
+
+    .header {
+      scroll-margin-top: 24px;
     }
 
     .card, .section {
@@ -197,6 +211,7 @@
       border-radius: 20px;
       padding: 24px;
       margin-bottom: 18px;
+      scroll-margin-top: 24px;
     }
 
     .section h2 {
@@ -438,12 +453,9 @@
       <a class="logo" href="/" aria-label="KubeAgentFlow home">
         <img src="/app/assets/kubeagentflow.png" alt="KubeAgentFlow" />
       </a>
-      <div class="nav-item active">Overview</div>
-      <div class="nav-item">Workloads</div>
-      <div class="nav-item">Services</div>
-      <div class="nav-item">YAML Preview</div>
-      <div class="nav-item">Logs & Events</div>
-      <div class="nav-item">Metrics</div>
+      <button class="nav-item active" data-target="overviewSection" onclick="goToSection('overviewSection')">Overview</button>
+      <button class="nav-item" data-target="outputsSection" onclick="goToSection('outputsSection')">Outputs</button>
+      <button class="nav-item" data-target="metricsSection" onclick="goToSection('metricsSection')">Metrics</button>
 
       <div class="sidebar-session">
         <div class="session-title">Session</div>
@@ -454,7 +466,7 @@
     </aside>
 
     <main class="main">
-      <div class="header">
+      <div class="header" id="overviewSection">
         <div>
           <h1>Overview</h1>
           <p>Live summary of your Kubernetes environment and last agentic operation.</p>
@@ -485,7 +497,7 @@
         </div>
       </div>
 
-      <section class="section">
+      <section class="section" id="workloadsSection">
         <h2>Current Workload</h2>
         <table class="workload-table">
           <thead>
@@ -503,19 +515,19 @@
         </table>
       </section>
 
-      <div class="grid-two">
-        <section class="section">
+      <div class="grid-two" id="outputsSection">
+        <section class="section" id="logsSection">
           <h2>Execution Output</h2>
           <div class="terminal" id="terminalOutput">Waiting for user request...</div>
         </section>
 
-        <section class="section">
+        <section class="section" id="yamlSection">
           <h2>YAML / LLM Generated Manifest</h2>
           <div class="yaml" id="yamlPreview">No YAML generated yet.</div>
         </section>
       </div>
 
-      <section class="section">
+      <section class="section" id="metricsSection">
         <h2>Execution Metrics</h2>
         <table>
           <tbody id="metricsTable">
@@ -536,7 +548,7 @@
           </select>
           <select id="generation_mode">
             <option value="hybrid_template">Hybrid</option>
-            <option value="llm_yaml">Full AI</option>
+            <option value="full_ai_experimental">Full AI</option>
           </select>
         </div>
       </div>
@@ -597,6 +609,8 @@
       } catch (error) {
         workloadsBySession = [];
       }
+
+      workloadsBySession = workloadsBySession.filter(item => item.app_name !== "cluster");
 
       renderWorkloads();
     }
@@ -668,6 +682,8 @@
 
     function upsertWorkloadFromData(data) {
       if (!data) return;
+      if (["list_deployments", "answer_contextual_question", "answer_question", "cluster_status", "show_app_port"].includes(data.intent)) return;
+      if (data.app_name === "cluster") return;
 
       if (data.intent === "delete") {
         if (data.diagnosis !== "deleted") return;
@@ -813,6 +829,46 @@
       document.getElementById("messages").scrollTop = 0;
     }
 
+    function setActiveNav(targetId) {
+      document.querySelectorAll(".nav-item").forEach(item => {
+        item.classList.toggle("active", item.dataset.target === targetId);
+      });
+    }
+
+    function goToSection(targetId) {
+      const section = document.getElementById(targetId);
+      if (!section) return;
+
+      setActiveNav(targetId);
+      section.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    function initSectionNavigation() {
+      const sections = [
+        "overviewSection",
+        "outputsSection",
+        "metricsSection"
+      ]
+        .map(id => document.getElementById(id))
+        .filter(Boolean);
+
+      const observer = new IntersectionObserver(entries => {
+        const visible = entries
+          .filter(entry => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+
+        if (visible) {
+          setActiveNav(visible.target.id);
+        }
+      }, {
+        root: null,
+        threshold: [0.25, 0.5, 0.75],
+        rootMargin: "-20% 0px -55% 0px"
+      });
+
+      sections.forEach(section => observer.observe(section));
+    }
+
     function addMessage(text, type) {
       const messages = document.getElementById("messages");
       const div = document.createElement("div");
@@ -873,6 +929,20 @@
         return;
       }
 
+      if (["list_deployments", "answer_contextual_question", "answer_question", "cluster_status", "show_app_port"].includes(data.intent)) {
+        workloadsBySession = workloadsBySession.filter(item => item.app_name !== "cluster");
+        saveWorkloads();
+        renderWorkloads();
+        document.getElementById("terminalOutput").textContent =
+          data.observation ||
+          data.reason ||
+          data.details ||
+          "Request completed.";
+        renderYaml(data);
+        renderMetrics(data);
+        return;
+      }
+
       lastValidDashboardState = data;
       selectedWorkloadName = data.app_name || selectedWorkloadName;
       saveDashboardState(data);
@@ -922,6 +992,10 @@
       const llm_model = document.getElementById("llm_model").value;
       const generation_mode = document.getElementById("generation_mode").value;
       const session_id = currentSessionId;
+      const selected_workload =
+        workloadsBySession.find((item) => item.app_name === selectedWorkloadName) ||
+        lastValidDashboardState ||
+        {};
 
       addMessage(escapeHtml(text), "user");
       input.value = "";
@@ -931,7 +1005,7 @@
         const res = await fetch("http://127.0.0.1:8000/deploy", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, session_id, llm_model, generation_mode })
+          body: JSON.stringify({ text, session_id, llm_model, generation_mode, selected_workload })
         });
 
         const data = await res.json();
@@ -1009,7 +1083,14 @@
       `;
     }
 
+    window.goToSection = goToSection;
+    window.setSession = setSession;
+    window.clearCurrentSession = clearCurrentSession;
+    window.scrollChatToTop = scrollChatToTop;
+    window.sendPrompt = sendPrompt;
+
     initSession();
+    initSectionNavigation();
   </script>
 </body>
 </html>

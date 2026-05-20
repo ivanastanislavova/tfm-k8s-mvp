@@ -122,6 +122,15 @@ class AgentState(TypedDict):
     # Historial conversacional (para contexto tipo ChatGPT)
     # Ej: [{"role": "user", "content": "..."}]
 
+    last_intent: str
+    # Última intención ejecutada en esta sesión.
+
+    last_observation: str
+    # Última salida útil producida por un nodo.
+
+    last_reason: str
+    # Última explicación corta producida por el sistema.
+
     # =========================
     # CONTROL DE RETRIES
     # =========================

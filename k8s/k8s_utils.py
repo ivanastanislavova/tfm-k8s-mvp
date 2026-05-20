@@ -1,6 +1,9 @@
 import os
 import re
 import subprocess
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 # os.environ["KUBECONFIG"] = "C:/tfm-k8s-mvp/config"
 
@@ -56,20 +59,22 @@ def deploy_files(session_id="default"):
         return False, "\n".join(combined_output)
 
     # Siempre aplicas deployment + service
-    files_to_apply = ["deployment.yaml", "service.yaml"]
+    files_to_apply = [PROJECT_ROOT / "deployment.yaml", PROJECT_ROOT / "service.yaml"]
 
     # SOLO si existe configmap → lo añadimos
-    if os.path.exists("configmap.yaml"):
-        files_to_apply.insert(0, "configmap.yaml")
+    configmap_path = PROJECT_ROOT / "configmap.yaml"
+    if configmap_path.exists():
+        files_to_apply.insert(0, configmap_path)
 
     # SOLO si existe ingress → lo añadimos
-    if os.path.exists("ingress.yaml"):
-        files_to_apply.append("ingress.yaml")
+    ingress_path = PROJECT_ROOT / "ingress.yaml"
+    if ingress_path.exists():
+        files_to_apply.append(ingress_path)
 
     # Ejecuta kubectl apply para cada YAML
     for file_name in files_to_apply:
         code, out, err = run_command(
-            ["kubectl", "apply", "-n", namespace, "-f", file_name]
+            ["kubectl", "apply", "-n", namespace, "-f", str(file_name)]
         )
 
         if out:
@@ -207,6 +212,58 @@ def get_deployment_status(app_name, session_id="default"):
             "-n",
             namespace_from_session(session_id),
             f"{app_name}-deployment",
+        ]
+    )
+
+    if code != 0:
+        return False, err if err else out
+
+    return True, out
+
+
+def list_deployments(session_id="default"):
+    namespace = namespace_from_session(session_id)
+    code, out, err = run_command(
+        ["kubectl", "get", "deployments", "-n", namespace, "--no-headers"]
+    )
+
+    if code != 0:
+        return False, err if err else out
+
+    return True, out
+
+
+def get_service_details(app_name, session_id="default"):
+    code, out, err = run_command(
+        [
+            "kubectl",
+            "get",
+            "service",
+            "-n",
+            namespace_from_session(session_id),
+            f"{app_name}-service",
+            "-o",
+            "jsonpath={.spec.ports[0].port} {.spec.ports[0].targetPort} {.spec.type}",
+        ]
+    )
+
+    if code != 0:
+        return False, err if err else out
+
+    return True, out
+
+
+def get_deployment_container_port(app_name, session_id="default"):
+    code, out, err = run_command(
+        [
+            "kubectl",
+            "get",
+            "deployment",
+            "-n",
+            namespace_from_session(session_id),
+            f"{app_name}-deployment",
+            "-o",
+            "jsonpath={.spec.template.spec.containers[0].ports[0].containerPort}",
         ]
     )
 

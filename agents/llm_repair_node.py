@@ -1,11 +1,14 @@
 import re
+from pathlib import Path
+
 import yaml
 from langchain_core.messages import HumanMessage
 from llm.llm_provider import get_llm
 from core.metrics import timed_node
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-@timed_node("repair_llm")
+
 def extract_yaml(text: str) -> str:
     text = text.strip()
     text = re.sub(r"```yaml", "", text, flags=re.IGNORECASE)
@@ -13,6 +16,7 @@ def extract_yaml(text: str) -> str:
     return text.strip()
 
 
+@timed_node("repair_llm")
 def repair_llm_node(state):
     print("\n[AGENT] LLM Repair Agent\n")
 
@@ -78,7 +82,7 @@ Rules:
     except Exception as e:
         return _fail(state, repaired_yaml, f"Invalid repaired YAML: {e}")
 
-    with open("llm_generated.yaml", "w", encoding="utf-8") as f:
+    with open(PROJECT_ROOT / "llm_generated.yaml", "w", encoding="utf-8") as f:
         f.write(repaired_yaml)
 
     state["llm_generated_yaml"] = repaired_yaml

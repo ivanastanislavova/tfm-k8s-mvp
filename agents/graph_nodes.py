@@ -34,6 +34,8 @@ from k8s.yaml_generator import write_yaml_files
 # Función que genera y guarda los YAMLs (Deployment, Service, ConfigMap, Ingress).
 
 from llm.llm_yaml_generator import generate_yaml_with_llm
+from langchain_core.messages import HumanMessage
+from llm.llm_provider import get_llm
 
 # Función que genera YAMLs usando un LLM (opcional, no determinista).
 
@@ -49,6 +51,9 @@ from k8s.k8s_utils import (
     get_deployment_status,
     get_pod_logs,
     describe_pod,
+    list_deployments,
+    get_service_details,
+    get_deployment_container_port,
     ensure_namespace,
     namespace_from_session,
 )
@@ -64,6 +69,7 @@ from agents.llm_agents import diagnose_with_llm, suggest_fix_with_llm
 
 
 KNOWN_IMAGES = ["nginx", "httpd", "mongo", "redis", "postgres", "busybox"]
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Lista de imágenes conocidas y "seguras" para detectar typos simples.
 # Esto hace que parte de la remediación sea determinista y no dependa del LLM.
 
@@ -89,6 +95,11 @@ def validate_node(state: AgentState):
     # Su función es revisar si la entrada del usuario tiene sentido antes de ejecutar nada.
 
     intent = state["intent"]
+
+    if intent in ["list_deployments", "answer_contextual_question", "answer_question"]:
+        state["has_error"] = False
+        state["history"].append(f"Validator: validación correcta para {intent}")
+        return state
 
     # Validación específica para create_cluster
     if intent == "create_cluster":
@@ -203,6 +214,8 @@ def generate_yaml_node(state: AgentState):
     print("\n[AGENT] YAML Generator Agent\n")
     # Agente generador de infraestructura.
     # En esta implementación es determinista: genera los YAML a partir del estado.
+    if state["use_ingress"] and not state["ingress_host"]:
+        state["ingress_host"] = f"{state['app_name']}.local"
 
     deployment_yaml, service_yaml, configmap_yaml, ingress_yaml = write_yaml_files(
         state["app_name"],
@@ -354,6 +367,168 @@ def status_node(state: AgentState):
     state["reason"] = "Deployment status could not be interpreted"
     state["has_error"] = True
 
+    return state
+
+
+@timed_node("list_deployments")
+def list_deployments_node(state: AgentState):
+    print("\n[AGENT] Deployment Inventory Agent\n")
+
+    success, output = list_deployments(state["session_id"])
+    print(output)
+
+    state["observation"] = output
+    state["history"].append("Inventory: deployments consultados")
+
+    if not success:
+        state["has_error"] = True
+        state["diagnosis"] = "list_deployments_failed"
+        state["reason"] = "kubectl get deployments failed"
+        return state
+
+    lines = [line for line in output.splitlines() if line.strip()]
+    count = len(lines)
+
+    state["has_error"] = False
+    state["diagnosis"] = "deployments_listed"
+    state["reason"] = f"Found {count} deployment{'s' if count != 1 else ''} in this session namespace"
+    return state
+
+
+@timed_node("answer_contextual_question")
+def answer_contextual_question_node(state: AgentState):
+    print("\n[AGENT] Context Answer Agent\n")
+
+    last_intent = state.get("last_intent", "")
+    last_observation = state.get("last_observation", "")
+
+    if last_intent == "list_deployments" and last_observation.strip():
+        names = []
+        for line in last_observation.splitlines():
+            parts = line.split()
+            if parts:
+                names.append(parts[0])
+
+        if names:
+            state["has_error"] = False
+            state["diagnosis"] = "context_answered"
+            state["reason"] = "They are: " + ", ".join(names)
+            state["observation"] = "\n".join(f"- {name}" for name in names)
+            state["history"].append("Context Answer: answered from last deployment list")
+            return state
+
+    state["has_error"] = True
+    state["diagnosis"] = "context_missing"
+    state["reason"] = "I do not have a previous result to answer that follow-up"
+    state["observation"] = state.get("last_reason", "")
+    state["history"].append("Context Answer: missing usable context")
+    return state
+
+
+@timed_node("answer_question")
+def answer_question_node(state: AgentState):
+    print("\n[AGENT] Conversational Answer Agent\n")
+
+    llm = get_llm(state.get("llm_model", "llama3.2:3b"))
+    prompt = f"""
+You are KubeAgentFlow's conversational Kubernetes assistant.
+
+Answer the user's question using only the context below.
+Do not execute actions.
+Do not claim that you changed, deployed, deleted, scaled, or created anything.
+If the user asks for an action, say what command/action they should ask explicitly.
+If the user asks how many replicas the current or selected application has and replicas is a positive integer, answer with that exact number.
+Do not say replicas are unspecified when the current app context contains a numeric replicas value.
+If the available context is not enough, say what information is missing.
+Keep the answer concise.
+
+User question:
+{state["user_request"]}
+
+Current app context:
+- app_name: {state.get("app_name", "")}
+- image: {state.get("image", "")}
+- replicas: {state.get("replicas", "")}
+- port: {state.get("port", "")}
+- service_type: {state.get("service_type", "")}
+- use_ingress: {state.get("use_ingress", "")}
+- ingress_host: {state.get("ingress_host", "")}
+
+Last system result:
+- last_intent: {state.get("last_intent", "")}
+- last_reason: {state.get("last_reason", "")}
+- last_observation:
+{state.get("last_observation", "")}
+
+Recent chat history:
+{state.get("chat_history", [])}
+"""
+
+    try:
+        response = llm.invoke([HumanMessage(content=prompt)])
+        answer = response.content.strip()
+    except Exception as e:
+        answer = f"I could not answer with the LLM: {e}"
+        state["has_error"] = True
+        state["diagnosis"] = "answer_failed"
+        state["reason"] = answer
+        state["observation"] = answer
+        state["history"].append("Conversational Answer: LLM failed")
+        return state
+
+    state["has_error"] = False
+    state["diagnosis"] = "answer_ready"
+    state["reason"] = answer
+    state["observation"] = answer
+    state["history"].append("Conversational Answer: answered with LLM context")
+    return state
+
+
+@timed_node("show_app_port")
+def show_app_port_node(state: AgentState):
+    print("\n[AGENT] Port Inspector Agent\n")
+
+    app_name = state["app_name"]
+    service_ok, service_output = get_service_details(app_name, state["session_id"])
+
+    if service_ok and service_output.strip():
+        parts = service_output.split()
+        service_port = parts[0] if len(parts) > 0 else ""
+        target_port = parts[1] if len(parts) > 1 else ""
+        service_type = parts[2] if len(parts) > 2 else ""
+
+        state["port"] = int(service_port) if service_port.isdigit() else state["port"]
+        state["service_type"] = service_type or state["service_type"]
+        state["has_error"] = False
+        state["diagnosis"] = "port_found"
+        state["reason"] = (
+            f"{app_name}-service exposes port {service_port}"
+            + (f" and targets container port {target_port}" if target_port else "")
+            + (f" as {service_type}" if service_type else "")
+        )
+        state["observation"] = state["reason"]
+        state["history"].append(f"Port Inspector: service port found for {app_name}")
+        return state
+
+    deployment_ok, deployment_output = get_deployment_container_port(
+        app_name, state["session_id"]
+    )
+
+    if deployment_ok and deployment_output.strip():
+        container_port = deployment_output.strip()
+        state["port"] = int(container_port) if container_port.isdigit() else state["port"]
+        state["has_error"] = False
+        state["diagnosis"] = "port_found"
+        state["reason"] = f"{app_name}-deployment container exposes port {container_port}"
+        state["observation"] = state["reason"]
+        state["history"].append(f"Port Inspector: deployment port found for {app_name}")
+        return state
+
+    state["has_error"] = True
+    state["diagnosis"] = "port_not_found"
+    state["reason"] = f"Could not find a Service or Deployment port for {app_name}"
+    state["observation"] = service_output if service_output else deployment_output
+    state["history"].append(f"Port Inspector: no port found for {app_name}")
     return state
 
 
@@ -721,8 +896,7 @@ def cluster_plan_node(state: AgentState):
         "cluster provisioning plan and scripts generated from LLM parameters"
     )
 
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    output_dir = os.path.join(BASE_DIR, "generated_cluster")
+    output_dir = os.path.join(PROJECT_ROOT, "provisioning", "generated_cluster")
     os.makedirs(output_dir, exist_ok=True)
 
     with open(os.path.join(output_dir, "master_setup.sh"), "w", encoding="utf-8") as f:
@@ -735,11 +909,11 @@ def cluster_plan_node(state: AgentState):
         f.write(virtualbox_script)
 
     state["observation"] = (
-        "Scripts generated in generated_cluster/: "
+        "Scripts generated in provisioning/generated_cluster/: "
         "create_vms.ps1, master_setup.sh and worker_setup.sh"
     )
     state["history"].append(
-        "Cluster Provisioning: scripts guardados en generated_cluster/"
+        "Cluster Provisioning: scripts guardados en provisioning/generated_cluster/"
     )
 
     print("Plan de clúster generado.\n")
@@ -789,7 +963,8 @@ def cluster_execute_node(state: AgentState):
     print("\n[AGENT] Cluster Execution Agent\n")
 
     inventory_path = state.get(
-        "cluster_inventory_path", "generated_cluster/inventory.json"
+        "cluster_inventory_path",
+        os.path.join(PROJECT_ROOT, "provisioning", "generated_cluster", "inventory.json"),
     )
 
     print("Ejecutando provisioning de Kubernetes sobre infraestructura cloud...")
@@ -912,7 +1087,9 @@ def generate_llm_yaml_node(state: AgentState):
         state["history"].append("LLM YAML Generator: YAML inválido")
         return state
 
-    with open("llm_generated.yaml", "w", encoding="utf-8") as f:
+    llm_yaml_path = os.path.join(PROJECT_ROOT, "llm_generated.yaml")
+
+    with open(llm_yaml_path, "w", encoding="utf-8") as f:
         f.write(yaml_text)
 
     state["has_error"] = False
@@ -947,7 +1124,7 @@ def deploy_llm_yaml_node(state: AgentState):
             "-n",
             namespace,
             "-f",
-            "llm_generated.yaml",
+            os.path.join(PROJECT_ROOT, "llm_generated.yaml"),
         ],
         capture_output=True,
         text=True,
@@ -962,7 +1139,14 @@ def deploy_llm_yaml_node(state: AgentState):
         return state
 
     result = subprocess.run(
-        ["kubectl", "apply", "-n", namespace, "-f", "llm_generated.yaml"],
+        [
+            "kubectl",
+            "apply",
+            "-n",
+            namespace,
+            "-f",
+            os.path.join(PROJECT_ROOT, "llm_generated.yaml"),
+        ],
         capture_output=True,
         text=True,
     )

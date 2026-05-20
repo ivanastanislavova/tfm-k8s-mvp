@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from core.graph_builder import build_graph
 from llm.llm_parser import parse_user_input
@@ -31,6 +31,7 @@ class DeployRequest(BaseModel):
     session_id: str = "default"
     llm_model: str = "llama3.2:3b"
     generation_mode: str = "hybrid_template"
+    selected_workload: dict = Field(default_factory=dict)
 
 
 @app.get("/", response_class=FileResponse)
@@ -47,6 +48,11 @@ def deploy(request: DeployRequest):
 
     try:
         start_time = time.time()
+
+        selected_workload = request.selected_workload or {}
+        selected_app_name = selected_workload.get("app_name", "")
+        if selected_app_name and selected_app_name != "cluster":
+            conversation_manager.update_context_from_parsed(session_id, selected_workload)
 
         context = conversation_manager.get_context(session_id)
         parse_start = time.time()
@@ -107,6 +113,9 @@ def deploy(request: DeployRequest):
             "metrics": {
                 "interpretation_time_seconds": round(interpretation_time, 4),
             },
+            "last_intent": context.get("last_intent", ""),
+            "last_observation": context.get("last_observation", ""),
+            "last_reason": context.get("last_reason", ""),
         }
 
         final_state = graph.invoke(initial_state)
@@ -121,6 +130,7 @@ def deploy(request: DeployRequest):
             "assistant",
             f"{final_state['diagnosis']}: {final_state['reason']}",
         )
+        conversation_manager.update_last_result(session_id, final_state)
 
         # Actualizar contexto si la acción modifica o mantiene el despliegue
         if final_state["intent"] in [
@@ -148,6 +158,9 @@ def deploy(request: DeployRequest):
                 "ingress_host": "",
                 "masters": 1,
                 "workers": 1,
+                "last_intent": "",
+                "last_observation": "",
+                "last_reason": "",
             }
 
             final_state["app_name"] = ""

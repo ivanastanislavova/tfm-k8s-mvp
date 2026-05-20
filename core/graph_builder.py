@@ -23,6 +23,10 @@ from agents.graph_nodes import (
     scale_node,
     delete_node,
     status_node,
+    list_deployments_node,
+    answer_contextual_question_node,
+    answer_question_node,
+    show_app_port_node,
     observe_node,
     diagnose_node,
     repair_node,
@@ -64,6 +68,10 @@ def build_graph():
     graph.add_node("scale", scale_node)  # escala replicas
     graph.add_node("delete", delete_node)  # elimina recursos
     graph.add_node("status", status_node)  # consulta estado
+    graph.add_node("list_deployments", list_deployments_node)
+    graph.add_node("answer_contextual_question", answer_contextual_question_node)
+    graph.add_node("answer_question", answer_question_node)
+    graph.add_node("show_app_port", show_app_port_node)
     graph.add_node("observe", observe_node)  # observa cluster (pods)
     graph.add_node("diagnose", diagnose_node)  # interpreta estado
     graph.add_node("diagnose_llm", diagnose_llm_node)  # interpreta estado
@@ -126,6 +134,18 @@ def build_graph():
         # STATUS → consultar estado
         if state["intent"] == "status":
             return "status"
+
+        if state["intent"] == "list_deployments":
+            return "list_deployments"
+
+        if state["intent"] == "answer_contextual_question":
+            return "answer_contextual_question"
+
+        if state["intent"] == "answer_question":
+            return "answer_question"
+
+        if state["intent"] == "show_app_port":
+            return "show_app_port"
 
         # SHOW YAML → primero generar YAML actualizado
         if state["intent"] == "show_yaml":
@@ -218,6 +238,10 @@ def build_graph():
     # =========================
     graph.add_edge("scale", "observe")  # tras escalar → observar
     graph.add_edge("status", END)  # status es un nodo final → no sigue a nada
+    graph.add_edge("list_deployments", END)
+    graph.add_edge("answer_contextual_question", END)
+    graph.add_edge("answer_question", END)
+    graph.add_edge("show_app_port", END)
 
     def route_after_observe(state):
         if state.get("generation_mode") == "full_ai_experimental":
@@ -270,7 +294,12 @@ def build_graph():
     # Ciclo completo:
     # error → repair → generate_yaml → deploy → observe → diagnose
 
-    graph.add_edge("repair_llm", "deploy_llm_yaml")
+    def route_after_repair_llm(state):
+        if state["diagnosis"] == "llm_yaml_ready":
+            return "deploy_llm_yaml"
+        return END
+
+    graph.add_conditional_edges("repair_llm", route_after_repair_llm)
     # Ciclo completo para LLM:
     # error → repair_llm → deploy_llm_yaml → observe → diagnose_llm
 

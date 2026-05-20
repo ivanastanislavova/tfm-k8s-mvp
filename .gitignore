@@ -22,6 +22,20 @@ build/
 # Logs
 *.log
 
+# Runtime outputs
+results/*.jsonl
+generated_apps/
+configmap.yaml
+ingress.yaml
+
+# Generated cluster artifacts
+provisioning/generated_cluster/*.sh
+provisioning/generated_cluster/*.ps1
+generated/generated_cluster/*.sh
+generated/generated_cluster/*.ps1
+agents/generated_cluster/*.sh
+agents/generated_cluster/*.ps1
+
 # Models
 *.bin
 *.pt

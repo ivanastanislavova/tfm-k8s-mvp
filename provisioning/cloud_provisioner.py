@@ -2,7 +2,7 @@
 Provisiona infraestructura para el clúster.
 
 Providers:
-- oracle: usa Terraform y OCI
+- terraform/oracle: usa Terraform y OCI
 - minikube: crea un clúster local reproducible
 """
 
@@ -88,7 +88,7 @@ def provision_minikube_infrastructure(params: dict):
 def provision_infrastructure(params: dict):
     provider = params.get("provider", "minikube")
 
-    if provider == "oracle":
+    if provider in ["terraform", "oracle"]:
         return provision_oracle_infrastructure(params)
 
     if provider == "minikube":

@@ -15,6 +15,9 @@ DEFAULT_CONTEXT = {
     "ingress_host": "",
     "masters": 1,
     "workers": 1,
+    "last_intent": "",
+    "last_observation": "",
+    "last_reason": "",
 }
 # CONTEXTO BASE
 # Esto es como el "estado inicial" de una conversación
@@ -194,6 +197,13 @@ class ConversationManager:
                 continue
 
         return completed
+
+    def update_last_result(self, session_id: str, final_state: dict):
+        session = self.get_session(session_id)
+        context = session["context"]
+        context["last_intent"] = final_state.get("intent", "")
+        context["last_observation"] = final_state.get("observation", "")
+        context["last_reason"] = final_state.get("reason", "")
 
     def get_messages(self, session_id: str):
         # Devuelve el historial del chat

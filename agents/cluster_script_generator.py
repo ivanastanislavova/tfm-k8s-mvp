@@ -141,6 +141,12 @@ echo "sudo kubeadm join <MASTER_IP>:6443 --token <TOKEN> --discovery-token-ca-ce
 
 
 def generate_virtualbox_script(params: dict):
+    # This function keeps the VirtualBox deployment logic as a reference path.
+    # It generates a PowerShell script that clones one master VM and N worker VMs
+    # from an existing Ubuntu template, configures their CPU, memory and network
+    # adapters, assigns host-only IPs, and starts the VMs in headless mode.
+    # It is not called by the main cluster flow until the VirtualBox execution
+    # path is validated end to end.
     workers = params["workers"]
     base_ip = "192.168.56.10"  # IP base para master
     master_ip = base_ip
@@ -206,7 +212,14 @@ def generate_cluster_artifacts(params: dict):
     cluster_plan = generate_cluster_plan(params)
     master_script = generate_master_script(params)
     worker_script = generate_worker_script(params)
+
+    # VirtualBox provisioning is intentionally disabled in the main flow for now.
+    # The generator function is kept above as reference implementation, but the
+    # current cluster workflow uses Minikube or cloud inventory execution instead.
+    # Re-enable this line when the VirtualBox path is ready to be executed end to end.
+    # virtualbox_script = generate_virtualbox_script(params)
     virtualbox_script = ""
-    inventory = {}
+
+    inventory = generate_inventory_json(params)
 
     return cluster_plan, master_script, worker_script, virtualbox_script, inventory

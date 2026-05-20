@@ -1,3 +1,9 @@
+import os
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
 def generate_deployment_yaml(app_name, image, replicas, port, use_configmap):
     # Genera el YAML de tipo Deployment.
     # Este recurso es el que define cuántos pods quieres, qué imagen usarán y qué puerto exponen.
@@ -129,6 +135,8 @@ def write_yaml_files(
 ):
     # Esta función es la que orquesta todo.
     # Genera los YAMLs necesarios, los guarda en archivos .yaml y además los devuelve como texto.
+    if use_ingress and not ingress_host:
+        ingress_host = f"{app_name}.local"
 
     deployment_yaml = generate_deployment_yaml(
         app_name, image, replicas, port, bool(config_data)
@@ -139,26 +147,30 @@ def write_yaml_files(
     service_yaml = generate_service_yaml(app_name, port, service_type)
     # Genera Service.
 
-    with open("deployment.yaml", "w", encoding="utf-8") as f:
+    with open(PROJECT_ROOT / "deployment.yaml", "w", encoding="utf-8") as f:
         f.write(deployment_yaml)
     # Guarda deployment.yaml en disco
 
-    with open("service.yaml", "w", encoding="utf-8") as f:
+    with open(PROJECT_ROOT / "service.yaml", "w", encoding="utf-8") as f:
         f.write(service_yaml)
     # Guarda service.yaml en disco
 
     configmap_yaml = ""
     if config_data:
         configmap_yaml = generate_configmap_yaml(app_name, config_data)
-        with open("configmap.yaml", "w", encoding="utf-8") as f:
+        with open(PROJECT_ROOT / "configmap.yaml", "w", encoding="utf-8") as f:
             f.write(configmap_yaml)
+    elif os.path.exists(PROJECT_ROOT / "configmap.yaml"):
+        os.remove(PROJECT_ROOT / "configmap.yaml")
     # Solo genera y guarda configmap.yaml si hay datos de configuración
 
     ingress_yaml = ""
     if use_ingress and ingress_host:
         ingress_yaml = generate_ingress_yaml(app_name, port, ingress_host)
-        with open("ingress.yaml", "w", encoding="utf-8") as f:
+        with open(PROJECT_ROOT / "ingress.yaml", "w", encoding="utf-8") as f:
             f.write(ingress_yaml)
+    elif os.path.exists(PROJECT_ROOT / "ingress.yaml"):
+        os.remove(PROJECT_ROOT / "ingress.yaml")
     # Solo genera y guarda ingress.yaml si se ha activado ingress y hay host
 
     return deployment_yaml, service_yaml, configmap_yaml, ingress_yaml

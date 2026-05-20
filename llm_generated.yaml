@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ngiinx-deployment
+  name: nginx-deployment
 spec:
   replicas: 2
   selector:
@@ -21,10 +21,12 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: ngiinx-service
+  name: nginx-service
 spec:
   selector:
     app: nginx
-  port: 80
-  targetPort: 80
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
   type: NodePort

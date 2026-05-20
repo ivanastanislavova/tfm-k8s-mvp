@@ -18,9 +18,25 @@ import re
 def extract_json(text: str):
     # Algunos LLMs a veces devuelven texto extra antes o después del JSON.
     # Esta función intenta extraer solo el bloque {...}.
+    start = text.find("{")
+    if start >= 0:
+        try:
+            _, end = json.JSONDecoder().raw_decode(text[start:])
+            return text[start : start + end]
+        except Exception:
+            pass
+
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if match:
-        return match.group(0)
+        json_text = match.group(0)
+        while json_text.endswith("}}"):
+            candidate = json_text[:-1]
+            try:
+                json.loads(candidate)
+                return candidate
+            except Exception:
+                json_text = candidate
+        return json_text
     return text
 
 
@@ -32,7 +48,7 @@ def normalize_service_type(text: str):
 
     if not text:
         return ""
-    text = text.lower()
+    text = re.sub(r"[\s_-]+", "", text.lower())
     if text == "nodeport":
         return "NodePort"
     if text == "clusterip":
@@ -61,12 +77,126 @@ def parse_config_data(raw_config: str):
     return config
 
 
+def normalize_app_reference(name: str):
+    name = (name or "").strip()
+    name = re.sub(r"-(?:deployment|service|pod)$", "", name, flags=re.IGNORECASE)
+    return name
+
+
+def infer_app_name_from_text(user_text: str, context: dict | None = None):
+    context = context or {}
+    text = user_text.strip()
+    context_app = context.get("app_name", "")
+
+    if context_app and re.search(rf"\b{re.escape(context_app)}(?:-(?:deployment|service|pod))?\b", text, re.IGNORECASE):
+        return context_app
+
+    patterns = [
+        r"(?:using|uses|used by|for|of|has|with|tiene|usa|de)\s+([a-zA-Z0-9\-]+)(?:\?|$)",
+        r"\b([a-zA-Z0-9\-]+)-(?:deployment|service|pod)\b",
+    ]
+
+    stopwords = {
+        "service",
+        "deployment",
+        "pod",
+        "port",
+        "cluster",
+        "namespace",
+        "the",
+        "that",
+        "this",
+        "using",
+        "uses",
+        "tiene",
+        "usa",
+    }
+
+    for pattern in patterns:
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        for match in reversed(matches):
+            candidate = normalize_app_reference(match)
+            if candidate and candidate.lower() not in stopwords:
+                return candidate
+
+    return ""
+
+
 def rule_based_parse(user_text: str):
     # PRIMERA CAPA: parseo determinista SIN IA
     # Aquí intentamos interpretar la petición con regex.
     # Esto es mejor que usar IA cuando la instrucción es simple y predecible.
 
     text = user_text.strip()
+    uses_terraform = bool(re.search(r"\bterraform\b", text, re.IGNORECASE))
+
+    # =========================
+    # LIST DEPLOYMENTS
+    # =========================
+    list_deployments_pattern = re.search(
+        r"(?:how many|cu[aá]nt[oa]s?|list|show|get|dime|muestra).*(?:deployments?|despliegues?)",
+        text,
+        re.IGNORECASE,
+    )
+
+    if list_deployments_pattern:
+        return {
+            "intent": "list_deployments",
+            "app_name": "cluster",
+            "image": "",
+            "replicas": 0,
+            "port": 0,
+            "service_type": "",
+            "config_data": {},
+            "use_ingress": None,
+            "ingress_host": "",
+            "provider": "minikube",
+        }
+
+    contextual_question_pattern = re.search(
+        r"^(?:which are they|what are they|what are their names|cu[aá]les son|cuales son|y cuales|y cu[aá]les|qu[eé] son|dime cuales|dime cu[aá]les)\??$",
+        text,
+        re.IGNORECASE,
+    )
+
+    if contextual_question_pattern:
+        return {
+            "intent": "answer_contextual_question",
+            "app_name": "cluster",
+            "image": "",
+            "replicas": 0,
+            "port": 0,
+            "service_type": "",
+            "config_data": {},
+            "use_ingress": None,
+            "ingress_host": "",
+            "provider": "minikube",
+        }
+
+    app_port_patterns = [
+        r"(?:what|which).*(?:port).*(?:does|do)\s+([a-zA-Z0-9\-]+)\s+(?:use|uses|have|has)",
+        r"(?:what|which).*(?:port).*(?:has|uses|is|for|of)\s+([a-zA-Z0-9\-]+)",
+        r"(?:cu[aá]l|que|qu[eé]).*(?:puerto).*(?:tiene|usa|es|de)\s+([a-zA-Z0-9\-]+)",
+    ]
+    app_port_pattern = None
+    for pattern in app_port_patterns:
+        app_port_pattern = re.search(pattern, text, re.IGNORECASE)
+        if app_port_pattern:
+            break
+
+    if app_port_pattern:
+        return {
+            "intent": "show_app_port",
+            "app_name": normalize_app_reference(app_port_pattern.group(1)),
+            "image": "",
+            "replicas": 0,
+            "port": 0,
+            "service_type": "",
+            "config_data": {},
+            "use_ingress": None,
+            "ingress_host": "",
+            "provider": "minikube",
+        }
 
     # =========================
     # CLUSTER STATUS / HEALTH
@@ -123,6 +253,7 @@ def rule_based_parse(user_text: str):
             "ingress_host": "",
             "masters": masters,
             "workers": workers,
+            "provider": "terraform" if uses_terraform else "minikube",
         }
 
     # =========================
@@ -157,8 +288,8 @@ def rule_based_parse(user_text: str):
         r"(?:\s+with\s+(\d+)\s+replicas?)?"
         r"(?:\s+on\s+port\s+(\d+))?"
         r"(?:\s+as\s+(NodePort|ClusterIP))?"
-        r"(?:\s+with\s+config\s+([A-Za-z0-9_\-=,\.\:]+))?"
-        r"(?:\s+with\s+ingress(?:\s+host\s+([a-zA-Z0-9\.\-]+))?)?",
+        r"(?:\s+(?:with|con)\s+(?:config|variables|env)\s+([A-Za-z0-9_\-=,\.\:]+))?"
+        r"(?:\s+(?:with|con)\s+ingress(?:\s+host\s+([a-zA-Z0-9\.\-]+))?)?",
         text,
         re.IGNORECASE,
     )
@@ -166,6 +297,22 @@ def rule_based_parse(user_text: str):
     # deploy my-web using nginx with 3 replicas on port 8080 as NodePort with config ENV=prod,DEBUG=false with ingress host myweb.local
 
     if deploy_pattern:
+        if uses_terraform:
+            return {
+                "intent": "create_cluster",
+                "app_name": "cluster",
+                "image": "",
+                "replicas": 0,
+                "port": 0,
+                "service_type": "",
+                "config_data": {},
+                "use_ingress": None,
+                "ingress_host": "",
+                "masters": 1,
+                "workers": 1,
+                "provider": "terraform",
+            }
+
         app_name = deploy_pattern.group(1)
         # Nombre de la app
 
@@ -191,7 +338,9 @@ def rule_based_parse(user_text: str):
         ingress_host = deploy_pattern.group(7) if deploy_pattern.group(7) else ""
         # Host del ingress si existe
 
-        use_ingress = bool(ingress_host) or ("with ingress" in text.lower())
+        use_ingress = bool(ingress_host) or bool(
+            re.search(r"(?:with|con)\s+ingress", text, re.IGNORECASE)
+        )
         # Si hay host o se menciona "with ingress", activamos ingress
 
         return {
@@ -300,7 +449,9 @@ def rule_based_parse(user_text: str):
     # UPDATE SERVICE TYPE
     # =========================
     update_service_pattern = re.search(
-        r"(?:make|hazlo|set).*(ClusterIP|NodePort)", text, re.IGNORECASE
+        r"(?:make|hazlo|set|change|cambia).*(Cluster\s*IP|ClusterIP|Node\s*Port|NodePort)",
+        text,
+        re.IGNORECASE,
     )
 
     if update_service_pattern:
@@ -320,7 +471,9 @@ def rule_based_parse(user_text: str):
     # ADD CONFIG
     # =========================
     add_config_pattern = re.search(
-        r"(?:add|añade)\s+config\s+([A-Za-z0-9_\-=,\.\:]+)", text, re.IGNORECASE
+        r"(?:add|añade|agrega)\s+(?:config|variables|env)\s+([A-Za-z0-9_\-=,\.\:]+)",
+        text,
+        re.IGNORECASE,
     )
 
     if add_config_pattern:
@@ -340,7 +493,7 @@ def rule_based_parse(user_text: str):
     # ENABLE INGRESS
     # =========================
     ingress_pattern = re.search(
-        r"(?:enable|add|with)\s+ingress(?:\s+host\s+([a-zA-Z0-9\.\-]+))?",
+        r"(?:enable|add|with|activa|añade|agrega|con)\s+ingress(?:\s+host\s+([a-zA-Z0-9\.\-]+))?",
         text,
         re.IGNORECASE,
     )
@@ -507,7 +660,7 @@ You are a Kubernetes conversational intent parser.
 
 Return ONLY valid JSON with exactly these keys:
 {{
-  "intent": "deploy | deploy_python | scale | delete | status | update_image | update_port | update_service | add_config | enable_ingress | disable_ingress | show_yaml | show_logs | describe_pod | create_cluster | cluster_status",
+  "intent": "deploy | deploy_python | scale | delete | status | update_image | update_port | update_service | add_config | enable_ingress | disable_ingress | show_yaml | show_logs | describe_pod | list_deployments | answer_contextual_question | answer_question | show_app_port | create_cluster | cluster_status",
   "app_name": "string",
   "image": "string",
   "replicas": integer,
@@ -518,6 +671,7 @@ Return ONLY valid JSON with exactly these keys:
   "ingress_host": "string",
   "masters": integer,
   "workers": integer,
+  "provider": "minikube | terraform | oracle",
   "python_file": "string"
 }}
 
@@ -529,7 +683,15 @@ Rules:
 - For missing string values use "".
 - For missing numeric values use 0.
 - For missing config use {{}}.
+- If the user asks how many deployments exist or asks to list deployments, use intent "list_deployments".
+- If the user asks a follow-up such as "which are they" or "cuáles son", use intent "answer_contextual_question".
+- If the user asks which port an app, service, or deployment uses, use intent "show_app_port".
+- If the user asks a general question and no safe action intent is clear, use intent "answer_question".
+- Never force a question into "deploy" just because it mentions an app name.
+- Use action intents only when the user clearly asks to create, modify, delete, inspect, or deploy something.
 - If ingress is not explicitly changed, set "use_ingress" to null.
+- If Terraform is explicitly requested for cluster/infrastructure provisioning, set provider to "terraform".
+- If no provider is explicitly requested, set provider to "minikube".
 - Use false only for explicit disable_ingress.
 - Use true only for explicit enable_ingress.
 - Output JSON only.
@@ -562,6 +724,11 @@ User request:
         if "use_ingress" not in data:
             data["use_ingress"] = None
         # Aseguramos ese campo aunque el modelo se lo olvide
+
+        if not data.get("app_name"):
+            inferred_app_name = infer_app_name_from_text(user_text, context)
+            if inferred_app_name:
+                data["app_name"] = inferred_app_name
 
         return data
     except Exception:
