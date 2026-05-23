@@ -1,0 +1,41 @@
+scenario,iteration,namespace,success,seconds,setup_seconds,command_count,setup_command_count,total_command_count,validation_message
+manual_deploy_nginx,1,manual-224240-deploy-nginx-1,True,2.5339921999984654,0.0,4,0,4,deployment ready
+manual_deploy_nginx_2_replicas,1,manual-224240-deploy-nginx-2-replicas-1,True,3.659827099996619,0.0,4,0,4,deployment ready
+manual_scale_nginx_to_3,1,manual-224240-scale-nginx-to-3-1,True,3.2260444999992615,2.4744014000025345,2,4,6,deployment ready
+manual_update_nginx_image,1,manual-224240-update-nginx-image-1,True,2.221699500005343,2.4731254000071203,2,4,6,nginx:1.27-alpine
+manual_status_nginx,1,manual-224240-status-nginx-1,True,0.13646970000991132,2.513441299990518,1,4,5,"NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   1/1     1            1           2s
+"
+manual_delete_nginx,1,manual-224240-delete-nginx-1,True,0.43793600000208244,2.4058899999945424,3,4,7,deployment deleted
+manual_deploy_nginx,2,manual-224240-deploy-nginx-2,True,2.3954312999994727,0.0,4,0,4,deployment ready
+manual_deploy_nginx_2_replicas,2,manual-224240-deploy-nginx-2-replicas-2,True,3.5824796999950195,0.0,4,0,4,deployment ready
+manual_scale_nginx_to_3,2,manual-224240-scale-nginx-to-3-2,True,3.2083283999963896,2.537760699997307,2,4,6,deployment ready
+manual_update_nginx_image,2,manual-224240-update-nginx-image-2,True,2.2269021999964025,2.6306132999889087,2,4,6,nginx:1.27-alpine
+manual_status_nginx,2,manual-224240-status-nginx-2,True,0.11915460000454914,2.3424710999970557,1,4,5,"NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   1/1     1            1           2s
+"
+manual_delete_nginx,2,manual-224240-delete-nginx-2,True,0.42983079999976326,2.505853800001205,3,4,7,deployment deleted
+manual_deploy_nginx,3,manual-224240-deploy-nginx-3,True,2.4146751999942353,0.0,4,0,4,deployment ready
+manual_deploy_nginx_2_replicas,3,manual-224240-deploy-nginx-2-replicas-3,True,3.7241007999982685,0.0,4,0,4,deployment ready
+manual_scale_nginx_to_3,3,manual-224240-scale-nginx-to-3-3,True,3.1930175999877974,2.5677160000050208,2,4,6,deployment ready
+manual_update_nginx_image,3,manual-224240-update-nginx-image-3,True,2.326768200000515,2.653940499993041,2,4,6,nginx:1.27-alpine
+manual_status_nginx,3,manual-224240-status-nginx-3,True,0.1255892000044696,2.4082549000013387,1,4,5,"NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   1/1     1            1           2s
+"
+manual_delete_nginx,3,manual-224240-delete-nginx-3,True,0.4749145999958273,2.5072235999978147,3,4,7,deployment deleted
+manual_deploy_nginx,4,manual-224240-deploy-nginx-4,True,2.3376064999902155,0.0,4,0,4,deployment ready
+manual_deploy_nginx_2_replicas,4,manual-224240-deploy-nginx-2-replicas-4,True,3.6220018999883905,0.0,4,0,4,deployment ready
+manual_scale_nginx_to_3,4,manual-224240-scale-nginx-to-3-4,True,3.188796899994486,2.511454000006779,2,4,6,deployment ready
+manual_update_nginx_image,4,manual-224240-update-nginx-image-4,True,2.2361120999994455,2.651541300001554,2,4,6,nginx:1.27-alpine
+manual_status_nginx,4,manual-224240-status-nginx-4,True,0.11579639998672064,2.3906302000104915,1,4,5,"NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   1/1     1            1           3s
+"
+manual_delete_nginx,4,manual-224240-delete-nginx-4,True,0.45780329999979585,2.5131277999898884,3,4,7,deployment deleted
+manual_deploy_nginx,5,manual-224240-deploy-nginx-5,True,2.4047423000010895,0.0,4,0,4,deployment ready
+manual_deploy_nginx_2_replicas,5,manual-224240-deploy-nginx-2-replicas-5,True,3.603054700011853,0.0,4,0,4,deployment ready
+manual_scale_nginx_to_3,5,manual-224240-scale-nginx-to-3-5,True,3.1310673999978462,2.6828701000049477,2,4,6,deployment ready
+manual_update_nginx_image,5,manual-224240-update-nginx-image-5,True,2.200796499993885,2.618920699998853,2,4,6,nginx:1.27-alpine
+manual_status_nginx,5,manual-224240-status-nginx-5,True,0.11339220000081696,2.4185240999941016,1,4,5,"NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   1/1     1            1           2s
+"
+manual_delete_nginx,5,manual-224240-delete-nginx-5,True,0.45088699999905657,2.4433401999995112,3,4,7,deployment deleted

@@ -316,6 +316,84 @@
       font-weight: 900;
     }
 
+    .metrics-chart {
+      margin-top: 18px;
+      display: flex;
+      gap: 18px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .metrics-donut {
+      width: 170px;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: conic-gradient(#e2e8f0 0deg, #e2e8f0 360deg);
+      position: relative;
+      flex: 0 0 auto;
+    }
+
+    .metrics-donut::after {
+      content: "";
+      width: 108px;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: white;
+      position: absolute;
+      box-shadow: inset 0 0 0 1px #e5e7eb;
+    }
+
+    .metrics-donut-center {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      font-weight: 900;
+      color: #0f172a;
+    }
+
+    .metrics-donut-center span {
+      display: block;
+      color: #64748b;
+      font-size: 11px;
+      font-weight: 800;
+      margin-top: 2px;
+    }
+
+    .metrics-legend {
+      display: grid;
+      gap: 9px;
+      min-width: 220px;
+      flex: 1;
+      font-size: 13px;
+    }
+
+    .metric-legend-item {
+      display: grid;
+      grid-template-columns: 12px minmax(0, 1fr);
+      gap: 9px;
+      align-items: center;
+      color: #334155;
+    }
+
+    .metric-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .metric-legend-label {
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+
+    .metric-legend-value {
+      color: #64748b;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
     .workload-row {
       cursor: pointer;
       transition: background 0.15s ease, box-shadow 0.15s ease;
@@ -647,6 +725,24 @@
         </div>
       </div>
 
+      <section class="section" id="workloadsSection">
+        <h2>Current Workload</h2>
+        <table class="workload-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Image</th>
+              <th>Replicas</th>
+              <th>Port</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="workloadTable">
+            <tr><td colspan="5">No deployment executed yet.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
       <section class="section" id="clusterSection">
         <h2>Cluster Information</h2>
         <div class="cluster-summary">
@@ -683,24 +779,6 @@
         </table>
       </section>
 
-      <section class="section" id="workloadsSection">
-        <h2>Current Workload</h2>
-        <table class="workload-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Image</th>
-              <th>Replicas</th>
-              <th>Port</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="workloadTable">
-            <tr><td colspan="5">No deployment executed yet.</td></tr>
-          </tbody>
-        </table>
-      </section>
-
       <div class="grid-two" id="outputsSection">
         <section class="section" id="logsSection">
           <h2>Execution Output</h2>
@@ -720,6 +798,9 @@
             <tr><td>No metrics available yet.</td></tr>
           </tbody>
         </table>
+        <div class="metrics-chart" id="metricsChart">
+          <div class="metrics-empty">No timing chart available yet.</div>
+        </div>
       </section>
     </main>
 
@@ -773,6 +854,7 @@
     let workloadsBySession = [];
     let lastValidDashboardState = null;
     let selectedWorkloadName = null;
+    let navClickLockUntil = 0;
 
     function escapeHtml(value) {
       return String(value)
@@ -823,7 +905,8 @@
         workloadsBySession = [];
       }
 
-      workloadsBySession = workloadsBySession.filter(item => item.app_name !== "cluster");
+      workloadsBySession = workloadsBySession.filter(isWorkloadSuccess);
+      saveWorkloads();
 
       renderWorkloads();
     }
@@ -831,6 +914,19 @@
     function saveWorkloads() {
       if (!currentSessionId) return;
       localStorage.setItem(getWorkloadsKey(), JSON.stringify(workloadsBySession));
+    }
+
+    function isWorkloadSuccess(data) {
+      if (!data) return false;
+      if (data.error || data.has_error) return false;
+      if (data.app_name === "cluster") return false;
+      if (["delete", "list_deployments", "answer_contextual_question", "answer_question", "cluster_status", "show_app_port", "create_cluster"].includes(data.intent)) return false;
+
+      const diagnosis = data.diagnosis || data.status || "";
+      if (diagnosis === "healthy") return true;
+      if (["scaled", "updated", "service_updated", "config_added", "ingress_enabled", "ingress_disabled"].includes(diagnosis)) return true;
+
+      return false;
     }
 
     function isValidDashboardData(data) {
@@ -895,10 +991,6 @@
 
     function upsertWorkloadFromData(data) {
       if (!data) return;
-      if (["list_deployments", "answer_contextual_question", "answer_question", "cluster_status", "show_app_port"].includes(data.intent)) return;
-      if (data.app_name === "cluster") return;
-      if (data.diagnosis && data.diagnosis.endsWith("_failed")) return;
-      if (data.has_error) return;
 
       if (data.intent === "delete") {
         if (data.diagnosis !== "deleted") return;
@@ -907,6 +999,27 @@
       }
 
       if (!data.app_name) return;
+
+      if (!isWorkloadSuccess(data)) {
+        workloadsBySession = workloadsBySession.filter(
+          item => item.app_name !== data.app_name
+        );
+        if (selectedWorkloadName === data.app_name) {
+          const nextWorkload = workloadsBySession[0] || null;
+          selectedWorkloadName = nextWorkload?.app_name || null;
+          lastValidDashboardState = nextWorkload;
+          if (nextWorkload) {
+            saveDashboardState(nextWorkload);
+            renderDashboardDetails(nextWorkload);
+          } else {
+            localStorage.removeItem(getDashboardKey());
+            resetDashboard();
+          }
+        }
+        saveWorkloads();
+        renderWorkloads();
+        return;
+      }
 
       const existingIndex = workloadsBySession.findIndex(
         item => item.app_name === data.app_name
@@ -1187,6 +1300,7 @@
       const section = document.getElementById(targetId);
       if (!section) return;
 
+      navClickLockUntil = Date.now() + 900;
       setActiveNav(targetId);
       section.scrollIntoView({ behavior: "smooth", block: "start" });
     }
@@ -1201,21 +1315,34 @@
         .map(id => document.getElementById(id))
         .filter(Boolean);
 
-      const observer = new IntersectionObserver(entries => {
-        const visible = entries
-          .filter(entry => entry.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+      const updateActiveSection = () => {
+        if (Date.now() < navClickLockUntil) return;
 
-        if (visible) {
-          setActiveNav(visible.target.id);
+        const viewportAnchor = window.innerHeight * 0.22;
+        let activeSection = sections[0];
+        let bestDistance = Number.POSITIVE_INFINITY;
+
+        sections.forEach(section => {
+          const rect = section.getBoundingClientRect();
+          const containsAnchor = rect.top <= viewportAnchor && rect.bottom >= viewportAnchor;
+          const distance = containsAnchor ? 0 : Math.abs(rect.top - viewportAnchor);
+
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            activeSection = section;
+          }
+        });
+
+        if (activeSection) {
+          setActiveNav(activeSection.id);
         }
-      }, {
-        root: null,
-        threshold: [0.25, 0.5, 0.75],
-        rootMargin: "-20% 0px -55% 0px"
-      });
+      };
 
-      sections.forEach(section => observer.observe(section));
+      window.addEventListener("scroll", () => {
+        window.requestAnimationFrame(updateActiveSection);
+      }, { passive: true });
+      window.addEventListener("resize", updateActiveSection);
+      updateActiveSection();
     }
 
     function addMessage(text, type) {
@@ -1226,6 +1353,13 @@
       messages.appendChild(div);
       saveChatHistory();
       scrollChatToBottom();
+      return div;
+    }
+
+    function removeMessage(messageElement) {
+      if (!messageElement || !messageElement.parentNode) return;
+      messageElement.remove();
+      saveChatHistory();
     }
 
     function setCardValue(id, value, compactThreshold = 16, compactOnly = false) {
@@ -1358,6 +1492,32 @@
         return;
       }
 
+      if (!isWorkloadSuccess(data)) {
+        upsertWorkloadFromData(data);
+        document.getElementById("terminalOutput").textContent =
+          data.observation ||
+          data.reason ||
+          data.details ||
+          "Request completed with errors.";
+        renderYaml(data);
+        renderMetrics(data);
+
+        if (lastValidDashboardState && isWorkloadSuccess(lastValidDashboardState)) {
+          selectedWorkloadName = lastValidDashboardState.app_name || selectedWorkloadName;
+          renderDashboardDetails(lastValidDashboardState);
+        } else {
+          localStorage.removeItem(getDashboardKey());
+          setCardValue("appName", "—");
+          setCardValue("imageName", "—");
+          setCardValue("replicas", "—");
+          setCardValue("serviceType", "—");
+          selectedWorkloadName = null;
+        }
+
+        renderWorkloads();
+        return;
+      }
+
       lastValidDashboardState = data;
       selectedWorkloadName = data.app_name || selectedWorkloadName;
       saveDashboardState(data);
@@ -1391,6 +1551,63 @@
       });
 
       document.getElementById("metricsTable").innerHTML = rows;
+      renderMetricsChart(data);
+    }
+
+    function formatMetricLabel(key) {
+      return String(key)
+        .replace(/_time_seconds$/i, "")
+        .replace(/_seconds$/i, "")
+        .replace(/_/g, " ");
+    }
+
+    function toMetricNumber(value) {
+      const number = Number(value);
+      return Number.isFinite(number) ? number : null;
+    }
+
+    function renderMetricsChart(data) {
+      const chart = document.getElementById("metricsChart");
+      if (!chart) return;
+
+      const colors = ["#2563eb", "#14b8a6", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#84cc16"];
+      const metricEntries = Object.entries(data.metrics || {})
+        .map(([key, value]) => [key, toMetricNumber(value)])
+        .filter(([, value]) => value !== null && value > 0);
+
+      const totalTime = toMetricNumber(data.execution_time_seconds);
+
+      if (!metricEntries.length || totalTime === null || totalTime <= 0) {
+        chart.innerHTML = `<div class="metrics-empty">No timing chart available yet.</div>`;
+        return;
+      }
+
+      const totalMeasured = metricEntries.reduce((sum, [, value]) => sum + value, 0);
+      let currentDegree = 0;
+      const segments = metricEntries.map(([key, value], index) => {
+        const degrees = totalMeasured > 0 ? (value / totalMeasured) * 360 : 0;
+        const start = currentDegree;
+        const end = currentDegree + degrees;
+        currentDegree = end;
+        return `${colors[index % colors.length]} ${start.toFixed(2)}deg ${end.toFixed(2)}deg`;
+      });
+
+      const legend = metricEntries.map(([key, value], index) => `
+        <div class="metric-legend-item">
+          <span class="metric-dot" style="background:${colors[index % colors.length]}"></span>
+          <span class="metric-legend-label">${escapeHtml(formatMetricLabel(key))}</span>
+        </div>
+      `).join("");
+
+      chart.innerHTML = `
+        <div class="metrics-donut" style="background: conic-gradient(${segments.join(", ")})">
+          <div class="metrics-donut-center">
+            ${escapeHtml(totalTime.toFixed(2))}s
+            <span>total</span>
+          </div>
+        </div>
+        <div class="metrics-legend">${legend}</div>
+      `;
     }
 
     async function sendPrompt() {
@@ -1414,7 +1631,7 @@
 
       addMessage(escapeHtml(text), "user");
       input.value = "";
-      addMessage("Executing request...", "assistant");
+      const pendingMessage = addMessage("Executing request...", "assistant");
 
       try {
         const res = await fetch("http://127.0.0.1:8000/deploy", {
@@ -1426,6 +1643,7 @@
         const data = await res.json();
         data.input = data.input || text;
         updateDashboard(data);
+        removeMessage(pendingMessage);
 
         if (data.error) {
           addMessage(`<b>${escapeHtml(data.error)}</b><br>${escapeHtml(data.details || data.input || "")}`, "assistant");
@@ -1436,15 +1654,20 @@
           );
         }
       } catch (error) {
+        removeMessage(pendingMessage);
         addMessage("Backend connection error. Check that FastAPI is running.", "assistant");
         document.getElementById("terminalOutput").textContent = error;
       }
     }
 
-    async function requestClusterStatus() {
+    async function requestClusterStatus(options = {}) {
+      const silent = options.silent === true;
+
       if (!currentSessionId) {
-        alert("Please assign a session ID before checking the cluster.");
-        setSession();
+        if (!silent) {
+          alert("Please assign a session ID before checking the cluster.");
+          setSession();
+        }
         return;
       }
 
@@ -1456,7 +1679,7 @@
         lastValidDashboardState ||
         {};
 
-      addMessage("Checking cluster status...", "assistant");
+      const pendingMessage = silent ? null : addMessage("Checking cluster status...", "assistant");
 
       try {
         const res = await fetch("http://127.0.0.1:8000/deploy", {
@@ -1473,16 +1696,37 @@
 
         const data = await res.json();
         data.input = "cluster status";
-        updateDashboard(data);
+        if (silent) {
+          renderClusterInfo(data);
+        } else {
+          updateDashboard(data);
+        }
+        removeMessage(pendingMessage);
 
-        addMessage(
-          `<b>${escapeHtml(data.diagnosis || "Cluster status")}</b><br>${escapeHtml(data.reason || "Cluster status checked.")}`,
-          "assistant"
-        );
+        if (!silent) {
+          addMessage(
+            `<b>${escapeHtml(data.diagnosis || "Cluster status")}</b><br>${escapeHtml(data.reason || "Cluster status checked.")}`,
+            "assistant"
+          );
+        }
       } catch (error) {
-        addMessage("Backend connection error. Check that FastAPI is running.", "assistant");
-        document.getElementById("terminalOutput").textContent = error;
+        removeMessage(pendingMessage);
+        if (silent) {
+          document.getElementById("clusterHealth").textContent = "Disconnected";
+        } else {
+          addMessage("Backend connection error. Check that FastAPI is running.", "assistant");
+          document.getElementById("terminalOutput").textContent = error;
+        }
       }
+    }
+
+    function startClusterHealthChecks() {
+      setTimeout(() => requestClusterStatus({ silent: true }), 1000);
+      setInterval(() => {
+        if (currentSessionId) {
+          requestClusterStatus({ silent: true });
+        }
+      }, 45000);
     }
 
     document.getElementById("input").addEventListener("keydown", function(e) {
@@ -1502,7 +1746,8 @@
       if (saved) {
         const data = JSON.parse(saved);
 
-        if (!isValidDashboardData(data)) {
+        if (!isValidDashboardData(data) || !isWorkloadSuccess(data)) {
+          localStorage.removeItem(getDashboardKey());
           resetDashboard();
           renderWorkloads();
           return;
@@ -1551,6 +1796,8 @@
           <td>No metrics available yet.</td>
         </tr>
       `;
+      document.getElementById("metricsChart").innerHTML =
+        `<div class="metrics-empty">No timing chart available yet.</div>`;
     }
 
     window.goToSection = goToSection;
@@ -1566,6 +1813,7 @@
 
     initSession();
     initSectionNavigation();
+    startClusterHealthChecks();
   </script>
 </body>
 </html>

@@ -1,0 +1,61 @@
+scenario,iteration,namespace,success,seconds,setup_seconds,helm_command_seconds,validation_message
+helm_deploy_nginx,1,helm-104336-deploy-nginx-1,False,0.11480690000462346,0.0,0.1147800000035204,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_deploy_nginx_2_replicas,1,helm-104336-deploy-nginx-2-replicas-1,False,0.10730070000863634,0.0,0.10728820000076666,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_scale_nginx_to_3,1,helm-104336-scale-nginx-to-3-1,False,0.10726990000694059,0.10726990000694059,,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_update_nginx_image,1,helm-104336-update-nginx-image-1,False,0.10936849999416154,0.10936849999416154,,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_status_nginx,1,helm-104336-status-nginx-1,False,0.104566199996043,0.104566199996043,,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_delete_nginx,1,helm-104336-delete-nginx-1,False,0.11043200000131037,0.11043200000131037,,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_deploy_nginx,2,helm-104336-deploy-nginx-2,False,0.10842550000234041,0.0,0.108413300011307,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_deploy_nginx_2_replicas,2,helm-104336-deploy-nginx-2-replicas-2,False,0.11004400000092573,0.0,0.1100323999999091,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_scale_nginx_to_3,2,helm-104336-scale-nginx-to-3-2,False,0.10745470000256319,0.10745470000256319,,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_update_nginx_image,2,helm-104336-update-nginx-image-2,False,0.10761440001078881,0.10761440001078881,,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_status_nginx,2,helm-104336-status-nginx-2,False,0.1078406000015093,0.1078406000015093,,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_delete_nginx,2,helm-104336-delete-nginx-2,False,0.1087590000097407,0.1087590000097407,,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_deploy_nginx,3,helm-104336-deploy-nginx-3,False,0.10879969999950845,0.0,0.10878730000695214,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_deploy_nginx_2_replicas,3,helm-104336-deploy-nginx-2-replicas-3,False,0.10787779999373015,0.0,0.10786400000506546,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_scale_nginx_to_3,3,helm-104336-scale-nginx-to-3-3,False,0.11572030000388622,0.11572030000388622,,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_update_nginx_image,3,helm-104336-update-nginx-image-3,False,0.11046210001222789,0.11046210001222789,,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_status_nginx,3,helm-104336-status-nginx-3,False,0.11145260000193957,0.11145260000193957,,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_delete_nginx,3,helm-104336-delete-nginx-3,False,0.1110878000035882,0.1110878000035882,,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_deploy_nginx,4,helm-104336-deploy-nginx-4,False,0.10964670000248589,0.0,0.1096350000007078,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_deploy_nginx_2_replicas,4,helm-104336-deploy-nginx-2-replicas-4,False,0.11653200000000652,0.0,0.116520000010496,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_scale_nginx_to_3,4,helm-104336-scale-nginx-to-3-4,False,0.10783860000083223,0.10783860000083223,,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_update_nginx_image,4,helm-104336-update-nginx-image-4,False,0.10654960000829305,0.10654960000829305,,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_status_nginx,4,helm-104336-status-nginx-4,False,0.10747779998928308,0.10747779998928308,,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_delete_nginx,4,helm-104336-delete-nginx-4,False,0.10995559999719262,0.10995559999719262,,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_deploy_nginx,5,helm-104336-deploy-nginx-5,False,0.10631789999024477,0.0,0.10630739999760408,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_deploy_nginx_2_replicas,5,helm-104336-deploy-nginx-2-replicas-5,False,0.109210599999642,0.0,0.10919890001241583,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_scale_nginx_to_3,5,helm-104336-scale-nginx-to-3-5,False,0.1112381999992067,0.1112381999992067,,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_update_nginx_image,5,helm-104336-update-nginx-image-5,False,0.10892849999072496,0.10892849999072496,,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_status_nginx,5,helm-104336-status-nginx-5,False,0.11222559999441728,0.11222559999441728,,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"
+helm_delete_nginx,5,helm-104336-delete-nginx-5,False,0.11191099999996368,0.11191099999996368,,"Error: kubernetes cluster unreachable: Get ""https://127.0.0.1:58350/version"": dial tcp 127.0.0.1:58350: connectex: No connection could be made because the target machine actively refused it.
+"

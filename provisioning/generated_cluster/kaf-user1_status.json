@@ -1,0 +1,39 @@
+{
+  "status": "ready",
+  "message": "Minikube cluster is ready.",
+  "inventory": {
+    "provider": "minikube",
+    "profile": "kaf-user1",
+    "context": "kaf-user1",
+    "cluster": "local",
+    "ssh_user": "",
+    "master": {
+      "host": "kaf-user1"
+    },
+    "workers": [
+      {
+        "host": "kaf-user1-m02"
+      }
+    ],
+    "timings": {
+      "master_node_deployment_seconds": 167.6813,
+      "extra_node_addition_seconds": [
+        164.6116
+      ],
+      "average_extra_node_addition_seconds": 164.6116,
+      "complete_cluster_deployment_seconds": 332.2929
+    }
+  },
+  "inventory_path": "C:\\tfm-k8s-mvp\\provisioning\\generated_cluster\\inventory.json",
+  "timings": {
+    "master_node_deployment_seconds": 167.6813,
+    "extra_node_addition_seconds": [
+      164.6116
+    ],
+    "average_extra_node_addition_seconds": 164.6116,
+    "complete_cluster_deployment_seconds": 332.2929
+  },
+  "logs": "=== minikube -p kaf-user1 status ===\n\ud83e\udd37  Profile \"kaf-user1\" not found. Run \"minikube profile list\" to view all profiles.\n\ud83d\udc49  To start a cluster, run: \"minikube start -p kaf-user1\"\n\n=== minikube -p kaf-user1 start --driver=docker --nodes=1 --cpus=2 --memory=4096 --cni=calico --wait=all --wait-timeout=420s ===\n\ud83d\ude04  [kaf-user1] minikube v1.38.1 en Microsoft Windows 11 Home 25H2\n\u2728  Using the docker driver based on user configuration\n\ud83d\udccc  Using Docker Desktop driver with root privileges\n\ud83d\udc4d  Starting \"kaf-user1\" primary control-plane node in \"kaf-user1\" cluster\n\ud83d\ude9c  Pulling base image v0.0.50 ...\n\ud83d\udd17  Configurando CNI Calico ...\n\ud83d\udd0e  Verifying Kubernetes components...\n    \u25aa Using image gcr.io/k8s-minikube/storage-provisioner:v5\n\ud83c\udf1f  Complementos habilitados: storage-provisioner, default-storageclass\n\n    \u25aa Want kubectl v1.35.1? Try 'minikube kubectl -- get pods -A'\n\ud83c\udfc4  Done! kubectl is now configured to use \"kaf-user1\" cluster and \"default\" namespace by default\n\u2757  Starting v1.39.0, minikube will default to \"containerd\" container runtime. See #21973 for more info.\n\u2757  Unable to create dedicated network, this might result in cluster IP change after restart: failed to create docker network kaf-user1: subnet is taken\n\u2757  C:\\Program Files\\Docker\\Docker\\resources\\bin\\kubectl.exe is version 1.30.5, which may have incompatibilities with Kubernetes 1.35.1.\n\n=== kubectl get nodes --no-headers ===\nkaf-user1   Ready   control-plane   115s   v1.35.1\n\n=== minikube -p kaf-user1 node add --worker ===\n\ud83d\ude04  Adding node m02 to cluster kaf-user1 as [worker]\n\ud83d\udc4d  Starting \"kaf-user1-m02\" worker node in \"kaf-user1\" cluster\n\ud83d\ude9c  Pulling base image v0.0.50 ...\n\ud83d\udd0e  Verifying Kubernetes components...\n\ud83c\udfc4  Successfully added m02 to kaf-user1!\n\u2757  Cluster was created without any CNI, adding a node to it might cause broken networking.\n\u2757  Unable to create dedicated network, this might result in cluster IP change after restart: failed to create docker network kaf-user1: subnet is taken\n\n=== kubectl get nodes --no-headers ===\nkaf-user1       Ready   control-plane   4m39s   v1.35.1\nkaf-user1-m02   Ready   <none>          18s     v1.35.1\n\n=== kubectl get node names ===\nkaf-user1\nkaf-user1-m02\n",
+  "profile": "kaf-user1",
+  "updated_at": "2026-05-22 10:55:24"
+}

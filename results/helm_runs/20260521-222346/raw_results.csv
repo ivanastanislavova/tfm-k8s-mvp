@@ -1,0 +1,136 @@
+scenario,iteration,namespace,success,seconds,setup_seconds,helm_command_seconds,validation_message
+helm_deploy_nginx,1,helm-222346-deploy-nginx-1,True,3.041670600010548,0.0,3.0416313000023365,deployment ready
+helm_deploy_nginx_2_replicas,1,helm-222346-deploy-nginx-2-replicas-1,True,2.283831000007922,0.0,2.2838211999915075,deployment ready
+helm_scale_nginx_to_3,1,helm-222346-scale-nginx-to-3-1,True,2.260427699991851,2.01598820000072,2.260413999989396,deployment ready
+helm_update_nginx_image,1,helm-222346-update-nginx-image-1,True,2.148487300000852,1.312763800000539,2.1484722000022884,nginx:1.27-alpine
+helm_status_nginx,1,helm-222346-status-nginx-1,True,0.16762110000126995,1.6484658000117633,0.16761409999162424,"NAME: nginx
+LAST DEPLOYED: Thu May 21 22:24:23 2026
+NAMESPACE: helm-222346-status-nginx-1
+STATUS: deployed
+REVISION: 1
+DESCRIPTION: Install complete
+RESOURCES:
+==> v1/Service
+NAME            TYPE       CLUSTER-IP    EXTERNAL-IP   PORT(S)        AGE
+nginx-service   NodePort   10.103.81.4   <none>        80:32238/TCP   2s
+
+==> v1/Deployment
+NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   1/1     1            1           2s
+
+==> v1/Pod(related)
+NAME                                READY   STATUS    RESTARTS   AGE
+nginx-deployment-5cd4c88668-qg295   1/1     Running   0          2s
+
+
+TEST SUITE: None
+"
+helm_delete_nginx,1,helm-222346-delete-nginx-1,True,0.29988130000128876,1.1989069999981439,0.2998756000015419,deployment deleted
+helm_deploy_nginx,2,helm-222346-deploy-nginx-2,True,1.3143058999994537,0.0,1.3142965999868466,deployment ready
+helm_deploy_nginx_2_replicas,2,helm-222346-deploy-nginx-2-replicas-2,True,2.285223099999712,0.0,2.2852125999925192,deployment ready
+helm_scale_nginx_to_3,2,helm-222346-scale-nginx-to-3-2,True,2.1773936999961734,2.108068199988338,2.1773786999983713,deployment ready
+helm_update_nginx_image,2,helm-222346-update-nginx-image-2,True,2.1691521999891847,2.0347151000023587,2.1691347000014503,nginx:1.27-alpine
+helm_status_nginx,2,helm-222346-status-nginx-2,True,0.15685990000201855,2.003553799993824,0.15685410000151023,"NAME: nginx
+LAST DEPLOYED: Thu May 21 22:25:14 2026
+NAMESPACE: helm-222346-status-nginx-2
+STATUS: deployed
+REVISION: 1
+DESCRIPTION: Install complete
+RESOURCES:
+==> v1/Pod(related)
+NAME                                READY   STATUS    RESTARTS   AGE
+nginx-deployment-5cd4c88668-8bdh7   1/1     Running   0          2s
+
+==> v1/Service
+NAME            TYPE       CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+nginx-service   NodePort   10.96.45.249   <none>        80:32423/TCP   2s
+
+==> v1/Deployment
+NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   1/1     1            1           2s
+
+
+TEST SUITE: None
+"
+helm_delete_nginx,2,helm-222346-delete-nginx-2,True,0.2963571000000229,1.2134694999986095,0.2963509000110207,deployment deleted
+helm_deploy_nginx,3,helm-222346-deploy-nginx-3,True,1.2683014000067487,0.0,1.2682880999927875,deployment ready
+helm_deploy_nginx_2_replicas,3,helm-222346-deploy-nginx-2-replicas-3,True,2.192936000006739,0.0,2.192926899995655,deployment ready
+helm_scale_nginx_to_3,3,helm-222346-scale-nginx-to-3-3,True,2.1639233000023523,2.0974178000033135,2.1639099000021815,deployment ready
+helm_update_nginx_image,3,helm-222346-update-nginx-image-3,True,2.1716095000010682,2.2408579000039026,2.1715944000025047,nginx:1.27-alpine
+helm_status_nginx,3,helm-222346-status-nginx-3,True,0.16070480000053067,1.9965023999975529,0.16069710000010673,"NAME: nginx
+LAST DEPLOYED: Thu May 21 22:26:05 2026
+NAMESPACE: helm-222346-status-nginx-3
+STATUS: deployed
+REVISION: 1
+DESCRIPTION: Install complete
+RESOURCES:
+==> v1/Service
+NAME            TYPE       CLUSTER-IP       EXTERNAL-IP   PORT(S)        AGE
+nginx-service   NodePort   10.109.112.119   <none>        80:31358/TCP   2s
+
+==> v1/Deployment
+NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   1/1     1            1           2s
+
+==> v1/Pod(related)
+NAME                                READY   STATUS    RESTARTS   AGE
+nginx-deployment-5cd4c88668-dmmpk   1/1     Running   0          2s
+
+
+TEST SUITE: None
+"
+helm_delete_nginx,3,helm-222346-delete-nginx-3,True,0.33383190000313334,1.2880816999968374,0.3338258000003407,deployment deleted
+helm_deploy_nginx,4,helm-222346-deploy-nginx-4,True,1.2662945999909425,0.0,1.2662796000076924,deployment ready
+helm_deploy_nginx_2_replicas,4,helm-222346-deploy-nginx-2-replicas-4,True,2.5211219000048004,0.0,2.5211135999998078,deployment ready
+helm_scale_nginx_to_3,4,helm-222346-scale-nginx-to-3-4,True,2.18008479999844,2.1637076000042725,2.180071399998269,deployment ready
+helm_update_nginx_image,4,helm-222346-update-nginx-image-4,True,2.1733749999984866,2.167992199989385,2.1733621999883326,nginx:1.27-alpine
+helm_status_nginx,4,helm-222346-status-nginx-4,True,0.15827189999981783,1.9629454000096302,0.15826719999313354,"NAME: nginx
+LAST DEPLOYED: Thu May 21 22:26:57 2026
+NAMESPACE: helm-222346-status-nginx-4
+STATUS: deployed
+REVISION: 1
+DESCRIPTION: Install complete
+RESOURCES:
+==> v1/Service
+NAME            TYPE       CLUSTER-IP      EXTERNAL-IP   PORT(S)        AGE
+nginx-service   NodePort   10.109.89.246   <none>        80:31974/TCP   2s
+
+==> v1/Deployment
+NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   1/1     1            1           2s
+
+==> v1/Pod(related)
+NAME                                READY   STATUS    RESTARTS   AGE
+nginx-deployment-5cd4c88668-pg5jq   1/1     Running   0          2s
+
+
+TEST SUITE: None
+"
+helm_delete_nginx,4,helm-222346-delete-nginx-4,True,0.2929705999995349,1.2841666999884183,0.292963999992935,deployment deleted
+helm_deploy_nginx,5,helm-222346-deploy-nginx-5,True,2.2573562000034144,0.0,2.257343299992499,deployment ready
+helm_deploy_nginx_2_replicas,5,helm-222346-deploy-nginx-2-replicas-5,True,2.281330400001025,0.0,2.2813197999930708,deployment ready
+helm_scale_nginx_to_3,5,helm-222346-scale-nginx-to-3-5,True,2.1634670000057667,2.1055519999936223,2.1634475000028033,deployment ready
+helm_update_nginx_image,5,helm-222346-update-nginx-image-5,True,2.3584973999968497,2.258068399998592,2.3584828000020934,nginx:1.27-alpine
+helm_status_nginx,5,helm-222346-status-nginx-5,True,0.16836930000863504,1.749791299997014,0.16836440000042785,"NAME: nginx
+LAST DEPLOYED: Thu May 21 22:27:49 2026
+NAMESPACE: helm-222346-status-nginx-5
+STATUS: deployed
+REVISION: 1
+DESCRIPTION: Install complete
+RESOURCES:
+==> v1/Deployment
+NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   1/1     1            1           2s
+
+==> v1/Pod(related)
+NAME                                READY   STATUS    RESTARTS   AGE
+nginx-deployment-5cd4c88668-2ljxd   1/1     Running   0          2s
+
+==> v1/Service
+NAME            TYPE       CLUSTER-IP      EXTERNAL-IP   PORT(S)        AGE
+nginx-service   NodePort   10.107.144.25   <none>        80:32116/TCP   2s
+
+
+TEST SUITE: None
+"
+helm_delete_nginx,5,helm-222346-delete-nginx-5,True,0.382249900008901,2.293883600010304,0.38224130000162404,deployment deleted

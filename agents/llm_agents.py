@@ -58,7 +58,8 @@ def suggest_fix_with_llm(app_name, image, replicas, diagnosis, reason, observati
     prompt = f"""
 You are a Kubernetes Remediation Agent.
 
-Your job is to propose a corrected configuration if possible.
+Your job is to propose a corrected configuration only when the failing image
+looks like a typo or a common alias of a well-known public container image.
 
 Return ONLY valid JSON with exactly this structure:
 {{
@@ -80,7 +81,11 @@ Observed kubectl output:
 {observation}
 
 Rules:
-- If there is a safe correction, return corrected values.
+- If the image is a clear typo of a known image, correct it.
+- If the image is a common product alias, map it to the usual public image.
+  Example: apache or apachee can be corrected to app_name "apache" and image "httpd:latest".
+- Do not replace one product with a different product. For example, never correct apache to nginx.
+- Do not invent private registries, vendor-specific images, or unrelated images.
 - If no safe correction is possible, return the same values unchanged.
 - Do not add explanations.
 - Output JSON only.

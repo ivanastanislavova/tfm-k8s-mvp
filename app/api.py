@@ -206,6 +206,7 @@ def deploy(request: DeployRequest):
             "workers": final_state["workers"],
             "diagnosis": final_state["diagnosis"],
             "reason": final_state["reason"],
+            "has_error": final_state["has_error"],
             "history": final_state["history"],
             "observation": final_state["observation"],
             "execution_time_seconds": round(execution_time, 2),

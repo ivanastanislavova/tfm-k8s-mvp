@@ -170,9 +170,13 @@ Service requirements:
 - kind: Service
 - metadata.name: {app_name}-service
 - selector.app: {app_name}
-- port: {port}
-- targetPort: {port}
 - type: {service_type}
+- Service ports must be written as a list named ports:
+  ports:
+  - port: {port}
+    targetPort: {port}
+    protocol: TCP
+- Never write port or targetPort directly under spec.
 
 Use YAML document separator --- between resources.
 """

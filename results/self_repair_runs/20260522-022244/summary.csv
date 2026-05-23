@@ -1,0 +1,4 @@
+scenario,failure_type,runs,detected,repaired,detection_rate,repair_rate,mean_seconds
+crash_loop_busybox,CrashLoopBackOff,3,3,3,1.0,1.0,15.274833333333333
+image_typo_ngnix,Image typo,3,3,3,1.0,1.0,9.964766666666668
+unknown_image_pull,ErrImagePull,3,3,3,1.0,1.0,12.37106666666667

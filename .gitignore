@@ -24,6 +24,7 @@ build/
 
 # Runtime outputs
 results/*.jsonl
+results/evaluation_runs/
 generated_apps/
 configmap.yaml
 ingress.yaml

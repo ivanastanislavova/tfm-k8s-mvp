@@ -79,6 +79,42 @@ def run_command(command, cwd=None, timeout=300):
         return 124, out, err
 
 
+def _get_node_lines(profile: str, logs: list, timeout=30):
+    nodes_command = f"kubectl --context {profile} get nodes --no-headers"
+    code, out, err = run_command(nodes_command, timeout=timeout)
+    logs.append("=== kubectl get nodes --no-headers ===")
+    logs.append(out + err)
+    if code != 0:
+        raise RuntimeError("\n".join(logs))
+    return [line for line in out.splitlines() if line.strip()], out + err
+
+
+def _wait_for_ready_nodes(profile: str, desired_nodes: int, logs: list, timeout=420):
+    nodes_command = f"kubectl --context {profile} get nodes --no-headers"
+    deadline = time.time() + timeout
+    last_nodes_output = ""
+
+    while time.time() < deadline:
+        code, out, err = run_command(nodes_command, timeout=30)
+        last_nodes_output = out + err
+        ready_nodes = [
+            line
+            for line in out.splitlines()
+            if line.strip() and " Ready " in f" {line} "
+        ]
+
+        if code == 0 and len(ready_nodes) >= desired_nodes:
+            return ready_nodes, last_nodes_output
+
+        time.sleep(5)
+
+    logs.append(f"=== waiting for {desired_nodes} nodes to become Ready ===")
+    logs.append(last_nodes_output)
+    raise RuntimeError(
+        f"Minikube profile {profile} has not reached {desired_nodes} Ready nodes."
+    )
+
+
 def provision_oracle_infrastructure(params: dict):
     os.makedirs(GENERATED_DIR, exist_ok=True)
     logs = []
@@ -123,6 +159,7 @@ def provision_minikube_infrastructure(params: dict):
     workers = params.get("workers", 1)
     desired_nodes = masters + workers
     logs = []
+    timings = {}
     _write_status(
         profile,
         {
@@ -138,13 +175,18 @@ def provision_minikube_infrastructure(params: dict):
     logs.append(out + err)
 
     if "Running" not in out:
+        master_start = time.perf_counter()
         command = (
-            f"minikube -p {profile} start --driver=docker --nodes={desired_nodes} "
+            f"minikube -p {profile} start --driver=docker --nodes=1 "
             f"--cpus={cpus} --memory={memory} "
-            "--wait=all --wait-timeout=180s"
+            "--cni=calico "
+            "--wait=all --wait-timeout=420s"
         )
 
-        code, out, err = run_command(command, timeout=600)
+        code, out, err = run_command(command, timeout=900)
+        timings["master_node_deployment_seconds"] = round(
+            time.perf_counter() - master_start, 4
+        )
 
         logs.append(f"=== {command} ===")
         logs.append(out + err)
@@ -154,55 +196,40 @@ def provision_minikube_infrastructure(params: dict):
     else:
         logs.append(f"Minikube profile {profile} is already running; start skipped.")
 
-    nodes_command = f"kubectl --context {profile} get nodes --no-headers"
-    code, out, err = run_command(nodes_command, timeout=30)
-    logs.append("=== kubectl get nodes --no-headers ===")
-    logs.append(out + err)
+    _wait_for_ready_nodes(profile, masters, logs, timeout=420)
+    current_nodes, _ = _get_node_lines(profile, logs)
 
-    if code != 0:
-        raise RuntimeError("\n".join(logs))
-
-    current_nodes = [line for line in out.splitlines() if line.strip()]
+    worker_addition_times = []
 
     while len(current_nodes) < desired_nodes:
+        worker_start = time.perf_counter()
         command = f"minikube -p {profile} node add --worker"
-        code, out, err = run_command(command, timeout=180)
+        code, out, err = run_command(command, timeout=600)
         logs.append(f"=== {command} ===")
         logs.append(out + err)
 
         if code != 0:
             raise RuntimeError("\n".join(logs))
 
-        code, out, err = run_command(nodes_command, timeout=30)
-        logs.append("=== kubectl get nodes --no-headers ===")
-        logs.append(out + err)
-
-        if code != 0:
-            raise RuntimeError("\n".join(logs))
-
-        current_nodes = [line for line in out.splitlines() if line.strip()]
-
-    deadline = time.time() + 120
-    last_nodes_output = ""
-    while time.time() < deadline:
-        code, out, err = run_command(nodes_command, timeout=30)
-        last_nodes_output = out + err
-        ready_nodes = [
-            line
-            for line in out.splitlines()
-            if line.strip() and " Ready " in f" {line} "
-        ]
-
-        if code == 0 and len(ready_nodes) >= desired_nodes:
-            break
-
-        time.sleep(5)
-    else:
-        logs.append("=== waiting for nodes to become Ready ===")
-        logs.append(last_nodes_output)
-        raise RuntimeError(
-            f"Minikube profile {profile} has not reached {desired_nodes} Ready nodes."
+        current_nodes, _ = _get_node_lines(profile, logs)
+        _wait_for_ready_nodes(profile, len(current_nodes), logs, timeout=420)
+        worker_addition_times.append(
+            round(time.perf_counter() - worker_start, 4)
         )
+
+    timings["extra_node_addition_seconds"] = worker_addition_times
+    timings["average_extra_node_addition_seconds"] = (
+        round(sum(worker_addition_times) / len(worker_addition_times), 4)
+        if worker_addition_times
+        else 0
+    )
+    timings["complete_cluster_deployment_seconds"] = round(
+        timings.get("master_node_deployment_seconds", 0)
+        + sum(worker_addition_times),
+        4,
+    )
+
+    _wait_for_ready_nodes(profile, desired_nodes, logs, timeout=420)
 
     code, out, err = run_command(
         f"kubectl --context {profile} get nodes --no-headers -o custom-columns=NAME:.metadata.name",
@@ -229,6 +256,7 @@ def provision_minikube_infrastructure(params: dict):
         "ssh_user": "",
         "master": {"host": master_name},
         "workers": [{"host": name} for name in worker_names],
+        "timings": timings,
     }
 
     inventory_path = os.path.join(GENERATED_DIR, "inventory.json")
@@ -243,6 +271,7 @@ def provision_minikube_infrastructure(params: dict):
             "message": "Minikube cluster is ready.",
             "inventory": inventory,
             "inventory_path": inventory_path,
+            "timings": timings,
             "logs": "\n".join(logs),
         },
     )

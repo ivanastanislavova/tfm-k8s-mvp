@@ -1,15 +1,27 @@
 {
   "provider": "minikube",
-  "profile": "kaf-cluster4",
-  "context": "kaf-cluster4",
+  "profile": "kaf-user2",
+  "context": "kaf-user2",
   "cluster": "local",
   "ssh_user": "",
   "master": {
-    "host": "kaf-cluster4"
+    "host": "kaf-user2"
   },
   "workers": [
     {
-      "host": "kaf-cluster4-m02"
+      "host": "kaf-user2-m02"
+    },
+    {
+      "host": "kaf-user2-m03"
     }
-  ]
+  ],
+  "timings": {
+    "master_node_deployment_seconds": 225.6997,
+    "extra_node_addition_seconds": [
+      176.3507,
+      182.5774
+    ],
+    "average_extra_node_addition_seconds": 179.464,
+    "complete_cluster_deployment_seconds": 584.6278
+  }
 }

@@ -1,0 +1,147 @@
+scenario,failure_type,iteration,session_id,prompt,seconds,request_ok,detected,repaired,final_diagnosis,final_reason,final_image,history
+image_typo_ngnix,Image typo,1,repair-image-typo-ngnix-1-7ef77f19,deploy repairtest using ngnix,10.7788,True,True,True,healthy,pods running,nginx,"Validator: validación correcta
+YAML Generator: YAML generado
+Execution: intento de despliegue app=repairtest, image=ngnix, replicas=1, port=80, service_type=NodePort
+Execution: kubectl apply correcto
+Stabilization: checking pod readiness for app=repairtest
+Diagnosis: image_pull_error - image pull failed
+Remediation: corrected image ngnix -> nginx
+YAML Generator: YAML generado
+Execution: intento de despliegue app=repairtest, image=nginx, replicas=1, port=80, service_type=NodePort
+Execution: kubectl apply correcto
+Stabilization: checking pod readiness for app=repairtest
+Diagnosis: healthy - pods running"
+unknown_image_pull,ErrImagePull,1,repair-unknown-image-pull-1-077cdaf6,deploy repairtest using doesnotexist/unknown-image:latest,18.9262,True,True,True,healthy,pods running,nginx:latest,"Validator: validación correcta
+YAML Generator: YAML generado
+Execution: intento de despliegue app=repairtest, image=doesnotexist/unknown-image:latest, replicas=1, port=80, service_type=NodePort
+Execution: kubectl apply correcto
+Stabilization: checking pod readiness for app=repairtest
+Diagnosis: image_pull_error - image pull failed
+Remediation: corrected app=repairtest->repairtest, image=doesnotexist/unknown-image:latest->nginx:latest, replicas=1->1
+YAML Generator: YAML generado
+Execution: intento de despliegue app=repairtest, image=nginx:latest, replicas=1, port=80, service_type=NodePort
+Execution: kubectl apply correcto
+Stabilization: checking pod readiness for app=repairtest
+Diagnosis: healthy - pods running"
+crash_loop_busybox,CrashLoopBackOff,1,repair-crash-loop-busybox-1-4666940d,deploy repairtest using busybox,17.1823,True,True,True,healthy,pods running,nginx,"Validator: validación correcta
+YAML Generator: YAML generado
+Execution: intento de despliegue app=repairtest, image=busybox, replicas=1, port=80, service_type=NodePort
+Execution: kubectl apply correcto
+Stabilization: checking pod readiness for app=repairtest
+Diagnosis: crash_loop - container crash loop detected
+Remediation: corrected app=repairtest->repairtest, image=busybox->nginx, replicas=1->3
+YAML Generator: YAML generado
+Execution: intento de despliegue app=repairtest, image=nginx, replicas=3, port=80, service_type=NodePort
+Execution: kubectl apply correcto
+Stabilization: checking pod readiness for app=repairtest
+Stabilization: pods are still starting
+Stabilization: checking pod readiness for app=repairtest
+Stabilization: pods are still starting
+Stabilization: checking pod readiness for app=repairtest
+Stabilization: pods are still starting
+Stabilization: checking pod readiness for app=repairtest
+Stabilization: pods are still starting
+Stabilization: checking pod readiness for app=repairtest
+Stabilization: pods are still starting
+Stabilization: checking pod readiness for app=repairtest
+Diagnosis: healthy - pods running"
+image_typo_ngnix,Image typo,2,repair-image-typo-ngnix-2-41df7057,deploy repairtest using ngnix,10.4441,True,True,True,healthy,pods running,nginx,"Validator: validación correcta
+YAML Generator: YAML generado
+Execution: intento de despliegue app=repairtest, image=ngnix, replicas=1, port=80, service_type=NodePort
+Execution: kubectl apply correcto
+Stabilization: checking pod readiness for app=repairtest
+Diagnosis: image_pull_error - image pull failed
+Remediation: corrected image ngnix -> nginx
+YAML Generator: YAML generado
+Execution: intento de despliegue app=repairtest, image=nginx, replicas=1, port=80, service_type=NodePort
+Execution: kubectl apply correcto
+Stabilization: checking pod readiness for app=repairtest
+Diagnosis: healthy - pods running"
+unknown_image_pull,ErrImagePull,2,repair-unknown-image-pull-2-23f8f6c8,deploy repairtest using doesnotexist/unknown-image:latest,9.0012,True,True,True,healthy,pods running,nginx:latest,"Validator: validación correcta
+YAML Generator: YAML generado
+Execution: intento de despliegue app=repairtest, image=doesnotexist/unknown-image:latest, replicas=1, port=80, service_type=NodePort
+Execution: kubectl apply correcto
+Stabilization: checking pod readiness for app=repairtest
+Diagnosis: image_pull_error - image pull failed
+Remediation: corrected app=repairtest->repairtest, image=doesnotexist/unknown-image:latest->nginx:latest, replicas=1->1
+YAML Generator: YAML generado
+Execution: intento de despliegue app=repairtest, image=nginx:latest, replicas=1, port=80, service_type=NodePort
+Execution: kubectl apply correcto
+Stabilization: checking pod readiness for app=repairtest
+Diagnosis: healthy - pods running"
+crash_loop_busybox,CrashLoopBackOff,2,repair-crash-loop-busybox-2-f0dc6423,deploy repairtest using busybox,15.5555,True,True,True,healthy,pods running,nginx,"Validator: validación correcta
+YAML Generator: YAML generado
+Execution: intento de despliegue app=repairtest, image=busybox, replicas=1, port=80, service_type=NodePort
+Execution: kubectl apply correcto
+Stabilization: checking pod readiness for app=repairtest
+Diagnosis: crash_loop - container crash loop detected
+Remediation: corrected app=repairtest->repairtest, image=busybox->nginx, replicas=1->3
+YAML Generator: YAML generado
+Execution: intento de despliegue app=repairtest, image=nginx, replicas=3, port=80, service_type=NodePort
+Execution: kubectl apply correcto
+Stabilization: checking pod readiness for app=repairtest
+Stabilization: pods are still starting
+Stabilization: checking pod readiness for app=repairtest
+Stabilization: pods are still starting
+Stabilization: checking pod readiness for app=repairtest
+Stabilization: pods are still starting
+Stabilization: checking pod readiness for app=repairtest
+Stabilization: pods are still starting
+Stabilization: checking pod readiness for app=repairtest
+Stabilization: pods are still starting
+Stabilization: checking pod readiness for app=repairtest
+Stabilization: pods are still starting
+Stabilization: checking pod readiness for app=repairtest
+Stabilization: pods are still starting
+Stabilization: checking pod readiness for app=repairtest
+Diagnosis: healthy - pods running"
+image_typo_ngnix,Image typo,3,repair-image-typo-ngnix-3-9d3b0d34,deploy repairtest using ngnix,8.6714,True,True,True,healthy,pods running,nginx,"Validator: validación correcta
+YAML Generator: YAML generado
+Execution: intento de despliegue app=repairtest, image=ngnix, replicas=1, port=80, service_type=NodePort
+Execution: kubectl apply correcto
+Stabilization: checking pod readiness for app=repairtest
+Diagnosis: image_pull_error - image pull failed
+Remediation: corrected image ngnix -> nginx
+YAML Generator: YAML generado
+Execution: intento de despliegue app=repairtest, image=nginx, replicas=1, port=80, service_type=NodePort
+Execution: kubectl apply correcto
+Stabilization: checking pod readiness for app=repairtest
+Diagnosis: healthy - pods running"
+unknown_image_pull,ErrImagePull,3,repair-unknown-image-pull-3-a30df473,deploy repairtest using doesnotexist/unknown-image:latest,9.1858,True,True,True,healthy,pods running,nginx:latest,"Validator: validación correcta
+YAML Generator: YAML generado
+Execution: intento de despliegue app=repairtest, image=doesnotexist/unknown-image:latest, replicas=1, port=80, service_type=NodePort
+Execution: kubectl apply correcto
+Stabilization: checking pod readiness for app=repairtest
+Diagnosis: image_pull_error - image pull failed
+Remediation: corrected app=repairtest->repairtest, image=doesnotexist/unknown-image:latest->nginx:latest, replicas=1->1
+YAML Generator: YAML generado
+Execution: intento de despliegue app=repairtest, image=nginx:latest, replicas=1, port=80, service_type=NodePort
+Execution: kubectl apply correcto
+Stabilization: checking pod readiness for app=repairtest
+Diagnosis: healthy - pods running"
+crash_loop_busybox,CrashLoopBackOff,3,repair-crash-loop-busybox-3-676ef5a8,deploy repairtest using busybox,13.0867,True,True,True,healthy,pods running,nginx,"Validator: validación correcta
+YAML Generator: YAML generado
+Execution: intento de despliegue app=repairtest, image=busybox, replicas=1, port=80, service_type=NodePort
+Execution: kubectl apply correcto
+Stabilization: checking pod readiness for app=repairtest
+Diagnosis: crash_loop - container crash loop detected
+Remediation: corrected app=repairtest->repairtest, image=busybox->nginx, replicas=1->3
+YAML Generator: YAML generado
+Execution: intento de despliegue app=repairtest, image=nginx, replicas=3, port=80, service_type=NodePort
+Execution: kubectl apply correcto
+Stabilization: checking pod readiness for app=repairtest
+Stabilization: pods are still starting
+Stabilization: checking pod readiness for app=repairtest
+Stabilization: pods are still starting
+Stabilization: checking pod readiness for app=repairtest
+Stabilization: pods are still starting
+Stabilization: checking pod readiness for app=repairtest
+Stabilization: pods are still starting
+Stabilization: checking pod readiness for app=repairtest
+Stabilization: pods are still starting
+Stabilization: checking pod readiness for app=repairtest
+Stabilization: pods are still starting
+Stabilization: checking pod readiness for app=repairtest
+Stabilization: pods are still starting
+Stabilization: checking pod readiness for app=repairtest
+Diagnosis: healthy - pods running"

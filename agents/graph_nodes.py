@@ -55,13 +55,16 @@ from k8s.k8s_utils import (
     delete_app_resources,
     scale_deployment,
     get_deployment_status,
+    get_rollout_status,
     get_pod_logs,
     describe_pod,
     list_deployments,
     get_service_details,
     get_deployment_container_port,
     get_cluster_nodes,
+    get_minikube_profile_status,
     get_kubectl_context,
+    kubectl_command,
     ensure_namespace,
     namespace_from_session,
 )
@@ -87,13 +90,23 @@ from provisioning.cluster_executor import execute_cluster_provisioning
 from builders.python_app_builder import build_python_app
 
 
-def suggest_known_image(image: str):
+def suggest_known_correction(image: str):
     # Busca si la imagen escrita por el usuario se parece mucho
     # a alguna imagen conocida.
-    matches = difflib.get_close_matches(image, KNOWN_IMAGES, n=1, cutoff=0.8)
+    normalized = (image or "").split(":", 1)[0].lower().strip()
+    if normalized in KNOWN_IMAGES:
+        return {"app_name": normalized, "image": f"{normalized}:latest"}
+
+    matches = difflib.get_close_matches(normalized, KNOWN_IMAGES, n=1, cutoff=0.78)
     if matches:
-        return matches[0]
+        candidate = matches[0]
+        return {"app_name": candidate, "image": f"{candidate}:latest"}
     return None
+
+
+def suggest_known_image(image: str):
+    correction = suggest_known_correction(image)
+    return correction["image"] if correction else None
 
 
 @timed_node("validate")
@@ -272,7 +285,7 @@ def deploy_node(state: AgentState):
     if not success:
         state["has_error"] = True
         state["diagnosis"] = "deployment_failed"
-        state["reason"] = "kubectl apply failed"
+        state["reason"] = output.strip() or "kubectl apply failed"
         state["observation"] = output
         state["history"].append("Execution: kubectl apply falló")
     else:
@@ -391,7 +404,7 @@ def list_deployments_node(state: AgentState):
     if not success:
         state["has_error"] = True
         state["diagnosis"] = "list_deployments_failed"
-        state["reason"] = "kubectl get deployments failed"
+        state["reason"] = output.strip() or "kubectl get deployments failed"
         return state
 
     lines = [line for line in output.splitlines() if line.strip()]
@@ -545,6 +558,13 @@ def observe_node(state: AgentState):
     print("\n[AGENT] Monitor Agent\n")
     print("Observando el estado de Kubernetes con espera dinámica...\n")
 
+    rollout_success, rollout_output = get_rollout_status(
+        state["app_name"], state["session_id"], timeout_seconds=20
+    )
+
+    if rollout_output:
+        state["history"].append(f"Rollout: {rollout_output.strip()}")
+
     max_attempts = 5
     wait_seconds = 2
 
@@ -570,26 +590,38 @@ def observe_node(state: AgentState):
             state["observation"] = output
 
             if (
-                "Running" in output
-                or "ErrImagePull" in output
+                "ErrImagePull" in output
                 or "ImagePullBackOff" in output
                 or "CrashLoopBackOff" in output
+                or rollout_success
             ):
                 break
 
         if attempt < max_attempts - 1:
             time.sleep(wait_seconds)
 
-    state["observation"] = final_output
+    state["observation"] = "\n".join(
+        part for part in [rollout_output.strip(), final_output.strip()] if part
+    )
     state["history"].append(
         f"Stabilization: checking pod readiness for app={state['app_name']}"
     )
 
     if final_output.strip() == "":
+        message = (
+            f"No pods found for app={state['app_name']} "
+            f"in namespace {namespace_from_session(state['session_id'])}."
+        )
         state["has_error"] = True
         state["diagnosis"] = "unknown"
-        state["reason"] = "no pods found for app"
+        state["reason"] = message
+        state["observation"] = message
         state["history"].append("Monitor: no se encontraron pods de la app")
+    elif not rollout_success:
+        state["has_error"] = True
+        state["diagnosis"] = "rollout_failed"
+        state["reason"] = rollout_output.strip() or "deployment rollout did not complete"
+        state["history"].append("Monitor: rollout no completado")
 
     return state
 
@@ -720,19 +752,26 @@ def repair_node(state: AgentState):
         return state
 
     # Primera capa: corrección determinista usando similitud con imágenes conocidas
-    if state["diagnosis"] == "image_pull_error":
-        candidate = suggest_known_image(state["image"])
+    no_pods_found = "No pods found" in (
+        state.get("reason", "") + "\n" + state.get("observation", "")
+    )
+    if state["diagnosis"] == "image_pull_error" or (
+        state["diagnosis"] == "unknown" and no_pods_found
+    ):
+        correction = suggest_known_correction(state["image"])
 
-        if candidate and candidate != state["image"]:
+        if correction and correction["image"] != state["image"]:
             old_app_name = state["app_name"]
             old_image = state["image"]
+            new_app_name = correction["app_name"]
+            new_image = correction["image"]
 
-            print(f"Aplicando corrección por similitud: {old_image} -> {candidate}\n")
+            print(f"Aplicando correccion por similitud: {old_image} -> {new_image}\n")
 
-            state["image"] = candidate
+            state["image"] = new_image
 
             if state["app_name"] == old_image:
-                state["app_name"] = candidate
+                state["app_name"] = new_app_name
             # Ojo: aquí además cambiamos app_name para mantener coherencia de labels/recursos
 
             delete_app_resources(old_app_name, state["session_id"])
@@ -740,7 +779,7 @@ def repair_node(state: AgentState):
 
             state["retries"] += 1
             state["history"].append(
-                f"Remediation: corrected image {old_image} -> {candidate}"
+                f"Remediation: corrected app={old_app_name}->{state['app_name']}, image={old_image}->{new_image}"
             )
             return state
 
@@ -759,6 +798,11 @@ def repair_node(state: AgentState):
         print("No se pudo obtener una corrección del LLM.\n")
         state["retries"] += 1
         state["history"].append("Remediation: sin sugerencia del LLM")
+        if state["diagnosis"] == "image_pull_error":
+            state["diagnosis"] = "image_pull_error_unrepaired"
+            state["reason"] = "image pull failed and no safe correction was found"
+            state["has_error"] = True
+            state["retries"] = state["max_retries"]
         return state
 
     new_app_name = suggestion.get("app_name", state["app_name"])
@@ -797,6 +841,11 @@ def repair_node(state: AgentState):
         print("No hay corrección segura. Se mantienen los valores actuales.\n")
         state["retries"] += 1
         state["history"].append("Remediation: sin cambios")
+        if state["diagnosis"] == "image_pull_error":
+            state["diagnosis"] = "image_pull_error_unrepaired"
+            state["reason"] = "image pull failed and no safe correction was found"
+            state["has_error"] = True
+            state["retries"] = state["max_retries"]
 
     return state
 
@@ -843,7 +892,7 @@ def show_logs_node(state: AgentState):
     if not success:
         state["has_error"] = True
         state["diagnosis"] = "logs_failed"
-        state["reason"] = "kubectl logs failed"
+        state["reason"] = output.strip() or "kubectl logs failed"
     else:
         state["diagnosis"] = "logs_ready"
         state["reason"] = "pod logs returned"
@@ -939,10 +988,15 @@ def cluster_status_node(state: AgentState):
     try:
         success, output = get_cluster_nodes(state["session_id"])
         job_status = read_minikube_status(minikube_profile_from_session(state["session_id"]))
+        profile_status_ok, profile_status = get_minikube_profile_status(profile)
 
         if job_status:
             output += "\n\nProvisioning job status:\n"
             output += json.dumps(job_status, indent=2)
+
+        if not success and profile_status:
+            output += "\n\nMinikube profile status:\n"
+            output += profile_status
 
         state["observation"] = output
 
@@ -954,6 +1008,20 @@ def cluster_status_node(state: AgentState):
             state["has_error"] = False
             state["diagnosis"] = "healthy"
             state["reason"] = f"Cluster reachable using provider={provider}, profile={profile}"
+        elif "kubeconfig: Misconfigured" in profile_status or "stale minikube-vm" in profile_status:
+            state["has_error"] = True
+            state["diagnosis"] = "cluster_disconnected"
+            state["reason"] = (
+                f"Cluster profile {profile} exists but kubeconfig is stale after Docker/Minikube restart. "
+                f"Run: minikube -p {profile} start"
+            )
+        elif "apiserver: Stopped" in profile_status or "kubelet: Stopped" in profile_status:
+            state["has_error"] = True
+            state["diagnosis"] = "cluster_stopped"
+            state["reason"] = (
+                f"Cluster profile {profile} exists but the control-plane is not running. "
+                f"Run: minikube -p {profile} start"
+            )
         else:
             state["has_error"] = True
             state["diagnosis"] = "unhealthy"
@@ -1131,7 +1199,7 @@ def generate_llm_yaml_node(state: AgentState):
 def deploy_llm_yaml_node(state: AgentState):
     print("\n[AGENT] LLM YAML Execution Agent\n")
     namespace = namespace_from_session(state["session_id"])
-    namespace_ready, namespace_output = ensure_namespace(namespace)
+    namespace_ready, namespace_output = ensure_namespace(namespace, state["session_id"])
 
     if not namespace_ready:
         state["has_error"] = True
@@ -1141,9 +1209,18 @@ def deploy_llm_yaml_node(state: AgentState):
         state["history"].append("LLM YAML Execution: namespace creation failed")
         return state
 
+    if "timed out waiting for the condition" in observation or "exceeded its progress deadline" in observation:
+        state["diagnosis"] = "rollout_failed"
+        state["reason"] = "deployment rollout did not complete"
+        state["has_error"] = True
+        print(f"DiagnÃ³stico: {state['diagnosis']}")
+        print(f"RazÃ³n: {state['reason']}\n")
+        state["history"].append(f"Diagnosis: {state['diagnosis']} - {state['reason']}")
+        return state
+
     dry_run = subprocess.run(
         [
-            "kubectl",
+            *kubectl_command(state["session_id"]),
             "apply",
             "--dry-run=client",
             "-n",
@@ -1165,7 +1242,7 @@ def deploy_llm_yaml_node(state: AgentState):
 
     result = subprocess.run(
         [
-            "kubectl",
+            *kubectl_command(state["session_id"]),
             "apply",
             "-n",
             namespace,
@@ -1181,7 +1258,7 @@ def deploy_llm_yaml_node(state: AgentState):
     if result.returncode != 0:
         state["has_error"] = True
         state["diagnosis"] = "deployment_failed"
-        state["reason"] = "kubectl apply failed"
+        state["reason"] = state["observation"].strip() or "kubectl apply failed"
         state["history"].append("LLM YAML Execution: kubectl apply falló")
     else:
         state["has_error"] = False

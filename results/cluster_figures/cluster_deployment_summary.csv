@@ -1,0 +1,4 @@
+cluster_size,master_node_deployment,complete_cluster_deployment,extra_node_addition,end_to_end
+2,146.4984,282.9896,136.4912,295.8999
+4,183.3418,694.1806,170.2796,697.6992
+8,231.7628,1484.5699,178.9724,1486.7536

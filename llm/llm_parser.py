@@ -129,6 +129,33 @@ def rule_based_parse(user_text: str):
 
     text = user_text.strip()
     uses_terraform = bool(re.search(r"\bterraform\b", text, re.IGNORECASE))
+    command_words = {
+        "show",
+        "get",
+        "list",
+        "status",
+        "logs",
+        "describe",
+        "delete",
+        "scale",
+        "update",
+    }
+    if re.match(
+        r"^deploy\s+(?:" + "|".join(command_words) + r")\b",
+        text,
+        re.IGNORECASE,
+    ):
+        return {
+            "intent": "deploy",
+            "app_name": "",
+            "image": "",
+            "replicas": 1,
+            "port": 80,
+            "service_type": "NodePort",
+            "config_data": {},
+            "use_ingress": None,
+            "ingress_host": "",
+        }
 
     # =========================
     # LIST DEPLOYMENTS
@@ -280,13 +307,13 @@ def rule_based_parse(user_text: str):
     # DEPLOY
     # =========================
     deploy_pattern = re.search(
-        r"deploy\s+([a-zA-Z0-9\-]+)"
+        r"^deploy\s+([a-zA-Z0-9\-]+)"
         r"(?:\s+using\s+([a-zA-Z0-9\:\._\-\/]+))?"
         r"(?:\s+with\s+(\d+)\s+replicas?)?"
         r"(?:\s+on\s+port\s+(\d+))?"
         r"(?:\s+as\s+(NodePort|ClusterIP))?"
         r"(?:\s+(?:with|con)\s+(?:config|variables|env)\s+([A-Za-z0-9_\-=,\.\:]+))?"
-        r"(?:\s+(?:with|con)\s+ingress(?:\s+host\s+([a-zA-Z0-9\.\-]+))?)?",
+        r"(?:\s+(?:with|con)\s+ingress(?:\s+host\s+([a-zA-Z0-9\.\-]+))?)?\s*$",
         text,
         re.IGNORECASE,
     )
@@ -311,6 +338,18 @@ def rule_based_parse(user_text: str):
             }
 
         app_name = deploy_pattern.group(1)
+        if app_name.lower() in command_words:
+            return {
+                "intent": "deploy",
+                "app_name": "",
+                "image": "",
+                "replicas": 1,
+                "port": 80,
+                "service_type": "NodePort",
+                "config_data": {},
+                "use_ingress": None,
+                "ingress_host": "",
+            }
         # Nombre de la app
 
         image = deploy_pattern.group(2) if deploy_pattern.group(2) else app_name

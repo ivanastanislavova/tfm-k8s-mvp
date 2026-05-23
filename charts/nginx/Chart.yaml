@@ -1,0 +1,6 @@
+apiVersion: v2
+name: kaf-nginx
+description: Minimal nginx chart used as Helm baseline for KubeAgentFlow evaluation.
+type: application
+version: 0.1.0
+appVersion: "1.27"

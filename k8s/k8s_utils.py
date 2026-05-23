@@ -1,10 +1,12 @@
 import os
+import json
 import re
 import subprocess
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GENERATED_CLUSTER_DIR = PROJECT_ROOT / "provisioning" / "generated_cluster"
+UPDATED_MINIKUBE_CONTEXTS = set()
 
 # os.environ["KUBECONFIG"] = "C:/tfm-k8s-mvp/config"
 
@@ -39,10 +41,32 @@ def kubectl_context_exists(context):
     return context in [line.strip() for line in out.splitlines()]
 
 
+def update_minikube_context_once(profile):
+    if profile in UPDATED_MINIKUBE_CONTEXTS:
+        return
+
+    try:
+        subprocess.run(
+            ["minikube", "-p", profile, "update-context"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+        )
+    except Exception:
+        pass
+
+    UPDATED_MINIKUBE_CONTEXTS.add(profile)
+
+
 def get_kubectl_context(session_id="default"):
     session_profile = minikube_profile_from_session(session_id)
     if kubectl_context_exists(session_profile):
+        update_minikube_context_once(session_profile)
         return session_profile
+    if kubectl_context_exists("minikube"):
+        update_minikube_context_once("minikube")
     return "minikube"
 
 
@@ -63,6 +87,21 @@ def namespace_from_session(session_id):
 def ensure_namespace(namespace, session_id="default"):
     code, out, err = run_command(kubectl_command(session_id, "get", "namespace", namespace))
     if code == 0:
+        phase_code, phase_out, phase_err = run_command(
+            kubectl_command(
+                session_id,
+                "get",
+                "namespace",
+                namespace,
+                "-o",
+                "jsonpath={.status.phase}",
+            )
+        )
+        if phase_code == 0 and phase_out.strip().lower() == "terminating":
+            return (
+                False,
+                f"Namespace {namespace} is still terminating. Wait until Kubernetes finishes deleting it or use a new session.",
+            )
         return True, out
 
     code, out, err = run_command(kubectl_command(session_id, "create", "namespace", namespace))
@@ -146,6 +185,8 @@ def get_pods_output(app_name, session_id="default"):
 def get_first_pod_name(app_name, session_id="default"):
     # UTILIDAD INTERNA
     # Saca el nombre del primer pod
+    if not app_name:
+        return False, "No application is selected for this session."
 
     code, out, err = run_command(
         [
@@ -157,14 +198,30 @@ def get_first_pod_name(app_name, session_id="default"):
             "-l",
             f"app={app_name}",
             "-o",
-            "jsonpath={.items[0].metadata.name}",  # para extraer nombre
+            "json",
         ]
     )
 
-    if code != 0 or not out.strip():
+    if code != 0:
         return False, err if err else out
 
-    return True, out.strip()
+    try:
+        payload = json.loads(out or "{}")
+    except json.JSONDecodeError:
+        return False, out or "kubectl returned invalid JSON while looking for pods."
+
+    items = payload.get("items", [])
+    if not items:
+        return (
+            False,
+            f"No pod found for app={app_name} in namespace {namespace_from_session(session_id)}.",
+        )
+
+    pod_name = items[0].get("metadata", {}).get("name", "")
+    if not pod_name:
+        return False, f"No pod name found for app={app_name}."
+
+    return True, pod_name
 
 
 def get_pod_logs(app_name, session_id="default"):
@@ -249,13 +306,45 @@ def get_deployment_status(app_name, session_id="default"):
     return True, out
 
 
+def get_rollout_status(app_name, session_id="default", timeout_seconds=20):
+    code, out, err = run_command(
+        [
+            *kubectl_command(session_id),
+            "rollout",
+            "status",
+            "deployment",
+            "-n",
+            namespace_from_session(session_id),
+            f"{app_name}-deployment",
+            f"--timeout={timeout_seconds}s",
+        ]
+    )
+
+    if code != 0:
+        return False, err if err else out
+
+    return True, out
+
+
 def list_deployments(session_id="default"):
     namespace = namespace_from_session(session_id)
+    namespace_code, namespace_out, namespace_err = run_command(
+        kubectl_command(session_id, "get", "namespace", namespace)
+    )
+    if namespace_code != 0:
+        namespace_message = namespace_err if namespace_err else namespace_out
+        if "NotFound" in namespace_message or "not found" in namespace_message:
+            return True, ""
+        return False, namespace_message
+
     code, out, err = run_command(
         kubectl_command(session_id, "get", "deployments", "-n", namespace, "--no-headers")
     )
 
     if code != 0:
+        message = err if err else out
+        if "No resources found" in message:
+            return True, ""
         return False, err if err else out
 
     return True, out
@@ -372,6 +461,11 @@ def get_cluster_nodes(session_id="default"):
     return True, out
 
 
+def get_minikube_profile_status(profile):
+    code, out, err = run_command(["minikube", "-p", profile, "status"])
+    return code == 0, "\n".join(part for part in [out, err] if part)
+
+
 def get_cluster_pods(session_id="default"):
     code, out, err = run_command(kubectl_command(session_id, "get", "pods", "-A"))
 
@@ -389,28 +483,18 @@ def cleanup_session_resources(session_id="default"):
     code, out, err = run_command(
         kubectl_command(session_id, "delete", "namespace", namespace, "--ignore-not-found")
     )
+    namespace_output = (out or "") + (err or "")
+    namespace_ok = code == 0 or "not found" in namespace_output.lower()
     outputs.append(f"=== delete namespace {namespace} ===")
-    outputs.append((out or "") + (err or ""))
+    outputs.append(namespace_output)
 
-    if kubectl_context_exists(profile):
-        result = subprocess.run(
-            ["minikube", "delete", "-p", profile],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=300,
-        )
-        outputs.append(f"=== delete minikube profile {profile} ===")
-        outputs.append((result.stdout or "") + (result.stderr or ""))
-        if result.returncode != 0:
-            return False, "\n".join(outputs)
-    else:
-        outputs.append(f"Minikube profile {profile} not found; skipped.")
+    outputs.append(
+        f"Minikube profile {profile} was not deleted. Session cleanup only removes the namespace."
+    )
 
     status_path = GENERATED_CLUSTER_DIR / f"{profile}_status.json"
     if status_path.exists():
         status_path.unlink()
         outputs.append(f"Deleted local cluster status file: {status_path}")
 
-    return code == 0, "\n".join(outputs)
+    return namespace_ok, "\n".join(outputs)

@@ -1,0 +1,7 @@
+scenario,runs,valid_runs,success_rate,mean_seconds,median_seconds,stdev_seconds,q1_seconds,q3_seconds,min_seconds,max_seconds
+helm_delete_nginx,5,0,0.0,,,,,,,
+helm_deploy_nginx,5,0,0.0,,,,,,,
+helm_deploy_nginx_2_replicas,5,0,0.0,,,,,,,
+helm_scale_nginx_to_3,5,0,0.0,,,,,,,
+helm_status_nginx,5,0,0.0,,,,,,,
+helm_update_nginx_image,5,0,0.0,,,,,,,

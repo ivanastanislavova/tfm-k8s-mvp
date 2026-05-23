@@ -290,7 +290,12 @@ def build_graph():
     # =========================
     # LOOP DE REMEDIACIÓN
     # =========================
-    graph.add_edge("repair", "generate_yaml")
+    def route_after_repair(state):
+        if state["diagnosis"].endswith("_unrepaired"):
+            return END
+        return "generate_yaml"
+
+    graph.add_conditional_edges("repair", route_after_repair)
     # Ciclo completo:
     # error → repair → generate_yaml → deploy → observe → diagnose
 

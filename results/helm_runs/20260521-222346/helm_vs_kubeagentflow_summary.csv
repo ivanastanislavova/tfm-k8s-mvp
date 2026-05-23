@@ -1,0 +1,9 @@
+operation,operation_label,kubeagentflow_mean_seconds,helm_mean_seconds,kubeagentflow_success_rate,helm_success_rate,kubeagentflow_runs,helm_runs
+Deploy nginx,Deploy nginx,4.2035,1.8295857400022213,1.0,1.0,30,5
+Deploy nginx 2 replicas,"Deploy nginx
+2 replicas",5.1164,2.31288848000404,1.0,1.0,30,5
+Scale to 3 replicas,"Scale to
+3 replicas",4.0004,2.1890592999989167,1.0,1.0,30,5
+Update image,Update image,6.4458,2.2042242799972884,1.0,1.0,30,5
+Status,Status,0.3264,0.1623654000024544,1.0,1.0,30,5
+Delete,Delete,1.027,0.3210581600025762,1.0,1.0,30,5
