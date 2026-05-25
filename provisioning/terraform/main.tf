@@ -1,7 +1,16 @@
-# Define la infraestructura cloud del clúster:
-# - Master
-# - Workers
-# - Red y acceso SSH
+terraform {
+  required_providers {
+    oci = {
+      source  = "oracle/oci"
+      version = ">= 8.12.0"
+    }
+  }
+}
+
+# Defines the cloud infrastructure for the Kubernetes cluster:
+# - Control-plane node
+# - Worker nodes
+# - Network attachment and SSH access
 
 data "oci_core_images" "ubuntu" {
   compartment_id           = var.compartment_id

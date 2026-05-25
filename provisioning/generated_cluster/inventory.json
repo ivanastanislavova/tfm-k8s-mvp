@@ -1,27 +1,23 @@
 {
   "provider": "minikube",
-  "profile": "kaf-user2",
-  "context": "kaf-user2",
+  "profile": "kaf-kubeuser2",
+  "context": "kaf-kubeuser2",
   "cluster": "local",
   "ssh_user": "",
   "master": {
-    "host": "kaf-user2"
+    "host": "kaf-kubeuser2"
   },
   "workers": [
     {
-      "host": "kaf-user2-m02"
-    },
-    {
-      "host": "kaf-user2-m03"
+      "host": "kaf-kubeuser2-m02"
     }
   ],
   "timings": {
-    "master_node_deployment_seconds": 225.6997,
+    "master_node_deployment_seconds": 209.4356,
     "extra_node_addition_seconds": [
-      176.3507,
-      182.5774
+      175.3552
     ],
-    "average_extra_node_addition_seconds": 179.464,
-    "complete_cluster_deployment_seconds": 584.6278
+    "average_extra_node_addition_seconds": 175.3552,
+    "complete_cluster_deployment_seconds": 384.7908
   }
 }

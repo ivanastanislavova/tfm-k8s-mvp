@@ -7,12 +7,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from core.graph_builder import build_graph
-from llm.llm_parser import parse_user_input
+from llm.llm_parser import infer_app_name_from_image, parse_user_input
 from core.conversation_manager import ConversationManager
 
 from core.metrics import save_evaluation_result
 from fastapi.responses import FileResponse
-from k8s.k8s_utils import cleanup_session_resources
+from k8s.k8s_utils import cleanup_session_resources, get_kubectl_context
 
 app = FastAPI()
 conversation_manager = ConversationManager()
@@ -25,6 +25,38 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _replace_image_tag(current_image: str, new_tag: str) -> str:
+    image = (current_image or "").strip()
+    tag = (new_tag or "").strip()
+    if not image or not tag:
+        return tag
+
+    last_slash = image.rfind("/")
+    last_colon = image.rfind(":")
+    has_tag = last_colon > last_slash
+
+    repository = image[:last_colon] if has_tag else image
+    return f"{repository}:{tag}"
+
+
+def _resolve_contextual_image_update(new_image: str, current_image: str) -> str:
+    image = (new_image or "").strip()
+    if not image:
+        return image
+
+    is_full_reference = "/" in image or ":" in image
+    looks_like_tag = (
+        image.lower() == "latest"
+        or image.startswith("v")
+        or any(char.isdigit() for char in image)
+    )
+
+    if current_image and not is_full_reference and looks_like_tag:
+        return _replace_image_tag(current_image, image)
+
+    return image
 
 
 class DeployRequest(BaseModel):
@@ -76,10 +108,23 @@ def deploy(request: DeployRequest):
 
         if not parsed:
             return {
-                "error": "No se pudo interpretar la petición",
+                "error": "Could not interpret the request",
                 "input": user_text,
                 "session_id": session_id,
             }
+
+        if (
+            parsed.get("intent") == "deploy"
+            and not parsed.get("app_name")
+            and parsed.get("image")
+        ):
+            parsed["app_name"] = infer_app_name_from_image(parsed["image"])
+
+        if parsed.get("intent") == "update_image":
+            parsed["image"] = _resolve_contextual_image_update(
+                parsed.get("image", ""),
+                context.get("image", ""),
+            )
 
         completed = conversation_manager.fill_missing_from_context(session_id, parsed)
 
@@ -147,7 +192,8 @@ def deploy(request: DeployRequest):
         )
         conversation_manager.update_last_result(session_id, final_state)
 
-        # Actualizar contexto si la acción modifica o mantiene el despliegue
+        # Keep the session context aligned after operations that modify or keep
+        # the selected workload.
         if final_state["intent"] in [
             "deploy",
             "scale",
@@ -161,7 +207,7 @@ def deploy(request: DeployRequest):
         ]:
             conversation_manager.update_context_from_parsed(session_id, final_state)
 
-        # Limpiar completamente el contexto si se elimina la app
+        # Reset workload context after deleting the selected application.
         if final_state["intent"] == "delete" and final_state["diagnosis"] == "deleted":
             conversation_manager.get_session(session_id)["context"] = {
                 "app_name": "",
@@ -204,6 +250,7 @@ def deploy(request: DeployRequest):
             "ingress_host": final_state["ingress_host"],
             "masters": final_state["masters"],
             "workers": final_state["workers"],
+            "cluster_profile": get_kubectl_context(session_id),
             "diagnosis": final_state["diagnosis"],
             "reason": final_state["reason"],
             "has_error": final_state["has_error"],

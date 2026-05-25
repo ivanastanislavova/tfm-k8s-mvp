@@ -6,25 +6,26 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GENERATED_CLUSTER_DIR = PROJECT_ROOT / "provisioning" / "generated_cluster"
+MANIFESTS_DIR = PROJECT_ROOT / "generated" / "manifests"
 UPDATED_MINIKUBE_CONTEXTS = set()
 
 # os.environ["KUBECONFIG"] = "C:/tfm-k8s-mvp/config"
 
 
 def run_command(command):
-    # FUNCIÓN BASE
-    # Ejecuta cualquier comando de terminal (kubectl)
+    # Base command runner.
+    # Executes terminal commands such as kubectl.
 
     result = subprocess.run(
         command,
-        capture_output=True,  # Captura stdout y stderr
-        text=True,  # Devuelve strings en vez de bytes
+        capture_output=True,
+        text=True,
         encoding="utf-8",
         errors="replace",
         timeout=60,
     )
 
-    # returncode → 0 = OK, !=0 = error
+    # returncode -> 0 means success; non-zero means error.
     return result.returncode, result.stdout, result.stderr
 
 
@@ -39,6 +40,28 @@ def kubectl_context_exists(context):
     if code != 0:
         return False
     return context in [line.strip() for line in out.splitlines()]
+
+
+def kubectl_contexts():
+    code, out, _ = run_command(["kubectl", "config", "get-contexts", "-o", "name"])
+    if code != 0:
+        return []
+    return [line.strip() for line in out.splitlines() if line.strip()]
+
+
+def kubectl_context_is_reachable(context):
+    code, _, _ = run_command(
+        [
+            "kubectl",
+            "--context",
+            context,
+            "get",
+            "namespace",
+            "default",
+            "--request-timeout=5s",
+        ]
+    )
+    return code == 0
 
 
 def update_minikube_context_once(profile):
@@ -60,12 +83,18 @@ def update_minikube_context_once(profile):
     UPDATED_MINIKUBE_CONTEXTS.add(profile)
 
 
+def minikube_profile_is_running(profile):
+    code, out, err = run_command(["minikube", "-p", profile, "status"])
+    status_text = f"{out}\n{err}"
+    return code == 0 and "Running" in status_text and "Stopped" not in status_text
+
+
 def get_kubectl_context(session_id="default"):
     session_profile = minikube_profile_from_session(session_id)
-    if kubectl_context_exists(session_profile):
+    if kubectl_context_exists(session_profile) and minikube_profile_is_running(session_profile):
         update_minikube_context_once(session_profile)
         return session_profile
-    if kubectl_context_exists("minikube"):
+    if kubectl_context_exists("minikube") and minikube_profile_is_running("minikube"):
         update_minikube_context_once("minikube")
     return "minikube"
 
@@ -112,8 +141,8 @@ def ensure_namespace(namespace, session_id="default"):
 
 
 def deploy_files(session_id="default"):
-    # AGENTE DE EJECUCIÓN REAL
-    # Aplica los YAMLs al cluster con kubectl
+    # Real execution helper.
+    # Applies generated manifests to the selected cluster with kubectl.
 
     success = True
     combined_output = []
@@ -125,20 +154,20 @@ def deploy_files(session_id="default"):
     if not namespace_ready:
         return False, "\n".join(combined_output)
 
-    # Siempre aplicas deployment + service
-    files_to_apply = [PROJECT_ROOT / "deployment.yaml", PROJECT_ROOT / "service.yaml"]
+    # Deployment and Service are always applied together.
+    files_to_apply = [MANIFESTS_DIR / "deployment.yaml", MANIFESTS_DIR / "service.yaml"]
 
-    # SOLO si existe configmap → lo añadimos
-    configmap_path = PROJECT_ROOT / "configmap.yaml"
+    # Apply ConfigMap only when it exists.
+    configmap_path = MANIFESTS_DIR / "configmap.yaml"
     if configmap_path.exists():
         files_to_apply.insert(0, configmap_path)
 
-    # SOLO si existe ingress → lo añadimos
-    ingress_path = PROJECT_ROOT / "ingress.yaml"
+    # Apply Ingress only when it exists.
+    ingress_path = MANIFESTS_DIR / "ingress.yaml"
     if ingress_path.exists():
         files_to_apply.append(ingress_path)
 
-    # Ejecuta kubectl apply para cada YAML
+    # Apply each generated manifest.
     for file_name in files_to_apply:
         code, out, err = run_command(
             kubectl_command(session_id, "apply", "-n", namespace, "-f", str(file_name))
@@ -155,13 +184,13 @@ def deploy_files(session_id="default"):
         if code != 0:
             success = False
 
-    # Devuelve si todo fue bien + logs completos
+    # Return success status and combined command output.
     return success, "\n".join(combined_output)
 
 
 def get_pods_output(app_name, session_id="default"):
-    # MONITORING
-    # Obtiene los pods de tu app
+    # Monitoring helper.
+    # Get pods for the selected application.
 
     code, out, err = run_command(
         [
@@ -171,7 +200,7 @@ def get_pods_output(app_name, session_id="default"):
             "-n",
             namespace_from_session(session_id),
             "-l",
-            f"app={app_name}",  # selector por label
+            f"app={app_name}",
             "--no-headers",
         ]
     )
@@ -183,8 +212,8 @@ def get_pods_output(app_name, session_id="default"):
 
 
 def get_first_pod_name(app_name, session_id="default"):
-    # UTILIDAD INTERNA
-    # Saca el nombre del primer pod
+    # Internal helper.
+    # Return the first matching pod name.
     if not app_name:
         return False, "No application is selected for this session."
 
@@ -225,7 +254,7 @@ def get_first_pod_name(app_name, session_id="default"):
 
 
 def get_pod_logs(app_name, session_id="default"):
-    # OBSERVABILIDAD: logs
+    # Observability: logs.
 
     ok, pod_name = get_first_pod_name(app_name, session_id)
     if not ok:
@@ -242,7 +271,7 @@ def get_pod_logs(app_name, session_id="default"):
 
 
 def describe_pod(app_name, session_id="default"):
-    # OBSERVABILIDAD: describe
+    # Observability: describe.
 
     ok, pod_name = get_first_pod_name(app_name, session_id)
     if not ok:
@@ -266,7 +295,7 @@ def describe_pod(app_name, session_id="default"):
 
 
 def scale_deployment(app_name, replicas, session_id="default"):
-    # ESCALADO dinámico
+    # Dynamic scaling.
 
     code, out, err = run_command(
         [
@@ -287,7 +316,7 @@ def scale_deployment(app_name, replicas, session_id="default"):
 
 
 def get_deployment_status(app_name, session_id="default"):
-    # CONSULTAR estado del deployment
+    # Query deployment status.
 
     code, out, err = run_command(
         [
@@ -391,8 +420,8 @@ def get_deployment_container_port(app_name, session_id="default"):
 
 
 def delete_app_resources(app_name, session_id="default"):
-    # LIMPIEZA TOTAL
-    # Borra todos los recursos asociados a la app
+    # Full cleanup.
+    # Delete all resources associated with the application.
     namespace = namespace_from_session(session_id)
     outputs = []
 
@@ -404,7 +433,7 @@ def delete_app_resources(app_name, session_id="default"):
             "-n",
             namespace,
             f"{app_name}-deployment",
-            "--ignore-not-found",  # evita errores si no existe
+            "--ignore-not-found",
         ]
     )
     outputs.extend([text for text in [out, err] if text])
@@ -466,6 +495,10 @@ def get_minikube_profile_status(profile):
     return code == 0, "\n".join(part for part in [out, err] if part)
 
 
+def minikube_profile_exists(profile):
+    return (Path.home() / ".minikube" / "profiles" / profile).exists()
+
+
 def get_cluster_pods(session_id="default"):
     code, out, err = run_command(kubectl_command(session_id, "get", "pods", "-A"))
 
@@ -479,22 +512,53 @@ def cleanup_session_resources(session_id="default"):
     namespace = namespace_from_session(session_id)
     profile = minikube_profile_from_session(session_id)
     outputs = []
+    success = True
 
-    code, out, err = run_command(
-        kubectl_command(session_id, "delete", "namespace", namespace, "--ignore-not-found")
-    )
-    namespace_output = (out or "") + (err or "")
-    namespace_ok = code == 0 or "not found" in namespace_output.lower()
-    outputs.append(f"=== delete namespace {namespace} ===")
-    outputs.append(namespace_output)
+    candidate_contexts = []
+    for context in [profile, "minikube", get_kubectl_context(session_id)]:
+        if context and context not in candidate_contexts:
+            candidate_contexts.append(context)
 
-    outputs.append(
-        f"Minikube profile {profile} was not deleted. Session cleanup only removes the namespace."
-    )
+    for context in candidate_contexts:
+        outputs.append(f"=== delete namespace {namespace} in context {context} ===")
+        if not kubectl_context_is_reachable(context):
+            outputs.append(f"Context {context} is not reachable; namespace cleanup skipped.")
+            continue
+
+        code, out, err = run_command(
+            [
+                "kubectl",
+                "--context",
+                context,
+                "delete",
+                "namespace",
+                namespace,
+                "--ignore-not-found",
+                "--wait=false",
+            ]
+        )
+        namespace_output = (out or "") + (err or "")
+        outputs.append(namespace_output)
+        if code != 0 and "not found" not in namespace_output.lower():
+            success = False
+
+    if minikube_profile_exists(profile) or kubectl_context_exists(profile):
+        outputs.append(f"=== delete minikube profile {profile} ===")
+        code, out, err = run_command(["minikube", "delete", "-p", profile])
+        profile_output = (out or "") + (err or "")
+        outputs.append(profile_output)
+        if code != 0 and "No such" not in profile_output and "not found" not in profile_output.lower():
+            success = False
+
+    for resource_type in ["context", "cluster", "user"]:
+        outputs.append(f"=== delete kubeconfig {resource_type} {profile} ===")
+        code, out, err = run_command(["kubectl", "config", f"delete-{resource_type}", profile])
+        cleanup_output = (out or "") + (err or "")
+        outputs.append(cleanup_output)
 
     status_path = GENERATED_CLUSTER_DIR / f"{profile}_status.json"
     if status_path.exists():
         status_path.unlink()
         outputs.append(f"Deleted local cluster status file: {status_path}")
 
-    return namespace_ok, "\n".join(outputs)
+    return success, "\n".join(outputs)

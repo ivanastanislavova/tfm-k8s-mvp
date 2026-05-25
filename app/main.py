@@ -17,7 +17,7 @@ if __name__ == "__main__":
         parsed = parse_user_input(user_text, context=context)
 
         if not parsed:
-            print("No se pudo interpretar la petición.")
+            print("Could not interpret the request.")
             continue
 
         completed = conversation_manager.fill_missing_from_context(session_id, parsed)

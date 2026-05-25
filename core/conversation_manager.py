@@ -1,9 +1,7 @@
 from copy import deepcopy
 
-# deepcopy se usa para copiar estructuras complejas (diccionarios)
-# sin compartir referencias (muy importante para evitar bugs)
 
-
+# Baseline context used when a new chat session starts.
 DEFAULT_CONTEXT = {
     "app_name": "",
     "image": "",
@@ -20,50 +18,28 @@ DEFAULT_CONTEXT = {
     "last_observation": "",
     "last_reason": "",
 }
-# CONTEXTO BASE
-# Esto es como el "estado inicial" de una conversación
-# Si el usuario no ha dicho nada, se parte de aquí
 
 
 class ConversationManager:
     def __init__(self):
         self.sessions = {}
-        # Diccionario de sesiones
-        # clave = session_id
-        # valor = {
-        #   context: {...},
-        #   messages: [...]
-        # }
 
     def get_session(self, session_id: str):
-        # Obtiene o crea una sesión
-
         if session_id not in self.sessions:
             self.sessions[session_id] = {
                 "context": deepcopy(DEFAULT_CONTEXT),
-                # Cada sesión tiene su propio contexto independiente
                 "messages": [],
-                # Historial de mensajes tipo chat
             }
 
         return self.sessions[session_id]
 
     def get_context(self, session_id: str):
-        # Devuelve el contexto actual de la sesión
-        session = self.get_session(session_id)
-        return session["context"]
+        return self.get_session(session_id)["context"]
 
     def add_message(self, session_id: str, role: str, text: str):
-        # Guarda mensajes tipo chat
-        # role: "user" o "assistant"
-
-        session = self.get_session(session_id)
-
-        session["messages"].append({"role": role, "text": text})
+        self.get_session(session_id)["messages"].append({"role": role, "text": text})
 
     def update_context_from_parsed(self, session_id: str, parsed: dict):
-        # ACTUALIZA el contexto con lo que el usuario acaba de decir
-
         session = self.get_session(session_id)
         context = session["context"]
 
@@ -85,63 +61,38 @@ class ConversationManager:
 
             value = parsed[key]
 
-            # =========================
-            # CONFIG DATA (merge)
-            # =========================
             if key == "config_data":
-                # No sobrescribe → combina configs
-                # ejemplo:
-                # antes: ENV=prod
-                # ahora: DEBUG=false
-                # resultado: ENV=prod, DEBUG=false
-
+                # Merge new key-value pairs without deleting existing config.
                 if isinstance(value, dict) and value:
                     context["config_data"].update(value)
                 continue
 
-            # =========================
-            # USE INGRESS
-            # =========================
             if key == "use_ingress":
                 if value is not None:
                     context["use_ingress"] = bool(value)
-
-                    # Si se desactiva ingress → borrar host
                     if value is False:
                         context["ingress_host"] = ""
                 continue
 
-            # =========================
-            # INGRESS HOST
-            # =========================
             if key == "ingress_host":
                 if value not in ["", None]:
                     context["ingress_host"] = value
                     context["use_ingress"] = True
                 continue
 
-            # =========================
-            # STRINGS
-            # =========================
             if key in ["app_name", "image", "service_type", "provider"]:
                 if value not in ["", None]:
                     context[key] = value
                 continue
 
-            # =========================
-            # NUMBERS
-            # =========================
             if key in ["replicas", "port"]:
                 if isinstance(value, int) and value > 0:
                     context[key] = value
                 continue
 
     def fill_missing_from_context(self, session_id: str, parsed: dict):
-        # COMPLETA lo que falta en el input del usuario usando contexto
-
         session = self.get_session(session_id)
         context = session["context"]
-
         completed = deepcopy(parsed)
 
         for key in [
@@ -157,33 +108,22 @@ class ConversationManager:
             "workers",
             "provider",
         ]:
-
             if key not in completed:
-                # Si no viene en parsed → coger del contexto
                 completed[key] = deepcopy(context[key])
                 continue
 
             value = completed[key]
 
-            # =========================
-            # STRINGS
-            # =========================
             if key in ["app_name", "image", "service_type", "ingress_host", "provider"]:
                 if value in ["", None]:
                     completed[key] = deepcopy(context[key])
                 continue
 
-            # =========================
-            # NUMBERS
-            # =========================
             if key in ["replicas", "port"]:
                 if value in [0, None]:
                     completed[key] = deepcopy(context[key])
                 continue
 
-            # =========================
-            # CONFIG MERGE
-            # =========================
             if key == "config_data":
                 merged = deepcopy(context["config_data"])
                 if isinstance(value, dict):
@@ -191,9 +131,6 @@ class ConversationManager:
                 completed[key] = merged
                 continue
 
-            # =========================
-            # USE INGRESS
-            # =========================
             if key == "use_ingress":
                 if value is None:
                     completed[key] = deepcopy(context["use_ingress"])
@@ -202,13 +139,10 @@ class ConversationManager:
         return completed
 
     def update_last_result(self, session_id: str, final_state: dict):
-        session = self.get_session(session_id)
-        context = session["context"]
+        context = self.get_session(session_id)["context"]
         context["last_intent"] = final_state.get("intent", "")
         context["last_observation"] = final_state.get("observation", "")
         context["last_reason"] = final_state.get("reason", "")
 
     def get_messages(self, session_id: str):
-        # Devuelve el historial del chat
-        session = self.get_session(session_id)
-        return session["messages"]
+        return self.get_session(session_id)["messages"]

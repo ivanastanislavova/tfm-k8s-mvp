@@ -1,0 +1,5 @@
+tenancy_ocid   = "ocid1.tenancy.oc1..replace-with-your-tenancy-ocid"
+compartment_id = "ocid1.compartment.oc1..replace-with-your-compartment-ocid"
+subnet_id      = "ocid1.subnet.oc1.region.replace-with-your-subnet-ocid"
+ssh_public_key = "C:/Users/your-user/.ssh/id_ed25519.pub"
+worker_count   = 1

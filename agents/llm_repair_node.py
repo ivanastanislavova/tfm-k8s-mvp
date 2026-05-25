@@ -8,6 +8,7 @@ from llm.llm_provider import get_llm
 from core.metrics import timed_node
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+MANIFESTS_DIR = PROJECT_ROOT / "generated" / "manifests"
 
 
 def extract_yaml(text: str) -> str:
@@ -83,7 +84,8 @@ Rules:
     except Exception as e:
         return _fail(state, repaired_yaml, f"Invalid repaired YAML: {e}")
 
-    with open(PROJECT_ROOT / "llm_generated.yaml", "w", encoding="utf-8") as f:
+    MANIFESTS_DIR.mkdir(parents=True, exist_ok=True)
+    with open(MANIFESTS_DIR / "llm_generated.yaml", "w", encoding="utf-8") as f:
         f.write(repaired_yaml)
 
     state["llm_generated_yaml"] = repaired_yaml
@@ -92,7 +94,7 @@ Rules:
     state["reason"] = "YAML repaired by LLM"
     state["has_error"] = False
     state["retries"] += 1
-    state["history"].append("LLM Repair: YAML corregido por IA")
+    state["history"].append("LLM Repair: YAML repaired by AI")
 
     return state
 
@@ -104,5 +106,5 @@ def _fail(state, yaml_text, reason):
     state["reason"] = reason
     state["has_error"] = True
     state["retries"] += 1
-    state["history"].append(f"LLM Repair: fallo - {reason}")
+    state["history"].append(f"LLM Repair: failed - {reason}")
     return state

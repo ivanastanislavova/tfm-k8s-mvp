@@ -14,6 +14,8 @@ node_modules/
 
 # Env
 .env
+config
+*.kubeconfig
 
 # Build
 dist/
@@ -25,17 +27,30 @@ build/
 # Runtime outputs
 results/*.jsonl
 results/evaluation_runs/
+results/helm_runs/
+results/manual_runs/
+results/self_repair_runs/
 generated_apps/
+generated/manifests/
 configmap.yaml
 ingress.yaml
+deployment.yaml
+service.yaml
+llm_generated.yaml
 
 # Generated cluster artifacts
 provisioning/generated_cluster/*.sh
 provisioning/generated_cluster/*.ps1
+provisioning/generated_cluster/*.json
 generated/generated_cluster/*.sh
 generated/generated_cluster/*.ps1
+generated/generated_cluster/*.json
 agents/generated_cluster/*.sh
 agents/generated_cluster/*.ps1
+agents/generated_cluster/*.json
+
+# Local Terraform credentials/values
+provisioning/terraform/terraform.tfvars
 
 # Models
 *.bin

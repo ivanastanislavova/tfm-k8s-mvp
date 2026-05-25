@@ -1,11 +1,11 @@
 """
-Ejecuta la instalación real de Kubernetes.
+Execute the actual Kubernetes installation.
 
-- Copia scripts por SSH
-- Ejecuta kubeadm init en master
-- Ejecuta kubeadm join en workers
+Copy scripts via SSH
+Run kubeadm init on master
+Run kubeadm join on workers
 
-Convierte el plan en un clúster real.
+Turn the plan into a real cluster.
 """
 
 import json

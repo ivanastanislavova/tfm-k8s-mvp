@@ -1,6 +1,6 @@
 from llm.llm_provider import get_llm
 
-# Aquí definimos el parser híbrido que interpreta el texto del usuario.
+# Hybrid parser that interprets the user request.
 
 from langchain_core.messages import HumanMessage
 
@@ -16,8 +16,8 @@ import re
 
 
 def extract_json(text: str):
-    # Algunos LLMs a veces devuelven texto extra antes o después del JSON.
-    # Esta función intenta extraer solo el bloque {...}.
+    # Some LLMs may return extra text before or after the JSON object.
+    # Extract only the JSON object when possible.
     start = text.find("{")
     if start >= 0:
         try:
@@ -83,6 +83,20 @@ def normalize_app_reference(name: str):
     return name
 
 
+def infer_app_name_from_image(image: str):
+    image = (image or "").strip()
+    if not image:
+        return ""
+
+    # Registry paths such as bitnami/nginx or ghcr.io/user/api:v1
+    # are valid image names, but Kubernetes labels/resource names
+    # need a simple DNS-compatible application name.
+    name = image.rsplit("/", 1)[-1]
+    name = name.split(":", 1)[0]
+    name = re.sub(r"[^a-zA-Z0-9\-]+", "-", name).strip("-").lower()
+    return name or "app"
+
+
 def infer_app_name_from_text(user_text: str, context: dict | None = None):
     context = context or {}
     text = user_text.strip()
@@ -124,8 +138,8 @@ def infer_app_name_from_text(user_text: str, context: dict | None = None):
 
 def rule_based_parse(user_text: str):
     # PRIMERA CAPA: parseo determinista SIN IA
-    # Aquí intentamos interpretar la petición con regex.
-    # Esto es mejor que usar IA cuando la instrucción es simple y predecible.
+    # First try to interpret the request with deterministic regex rules.
+    # This is faster and safer than using AI for simple predictable commands.
 
     text = user_text.strip()
     uses_terraform = bool(re.search(r"\bterraform\b", text, re.IGNORECASE))
@@ -306,6 +320,36 @@ def rule_based_parse(user_text: str):
     # =========================
     # DEPLOY
     # =========================
+    image_only_deploy_pattern = re.search(
+        r"^deploy\s+([a-zA-Z0-9\:\._\-\/]+)"
+        r"(?:\s+with\s+(\d+)\s+replicas?)?"
+        r"(?:\s+on\s+port\s+(\d+))?"
+        r"(?:\s+as\s+(NodePort|ClusterIP))?\s*$",
+        text,
+        re.IGNORECASE,
+    )
+
+    if image_only_deploy_pattern and (
+        "/" in image_only_deploy_pattern.group(1)
+        or ":" in image_only_deploy_pattern.group(1)
+    ):
+        image = image_only_deploy_pattern.group(1)
+        return {
+            "intent": "deploy",
+            "app_name": infer_app_name_from_image(image),
+            "image": image,
+            "replicas": int(image_only_deploy_pattern.group(2)) if image_only_deploy_pattern.group(2) else 1,
+            "port": int(image_only_deploy_pattern.group(3)) if image_only_deploy_pattern.group(3) else 80,
+            "service_type": (
+                normalize_service_type(image_only_deploy_pattern.group(4))
+                if image_only_deploy_pattern.group(4)
+                else "NodePort"
+            ),
+            "config_data": {},
+            "use_ingress": None,
+            "ingress_host": "",
+        }
+
     deploy_pattern = re.search(
         r"^deploy\s+([a-zA-Z0-9\-]+)"
         r"(?:\s+using\s+([a-zA-Z0-9\:\._\-\/]+))?"
@@ -353,23 +397,23 @@ def rule_based_parse(user_text: str):
         # Nombre de la app
 
         image = deploy_pattern.group(2) if deploy_pattern.group(2) else app_name
-        # Si el usuario no da imagen explícita, por diseño se asume image = app_name
+        # If the user does not provide an explicit image, use app_name as image.
 
         replicas = int(deploy_pattern.group(3)) if deploy_pattern.group(3) else 1
-        # Si no especifica réplicas, se usa 1
+        # Default to one replica when replicas are not specified.
 
         port = int(deploy_pattern.group(4)) if deploy_pattern.group(4) else 80
-        # Si no especifica puerto, se usa 80
+        # Default to port 80 when no port is specified.
 
         service_type = (
             normalize_service_type(deploy_pattern.group(5))
             if deploy_pattern.group(5)
             else "NodePort"
         )
-        # Si no especifica tipo de servicio, se usa NodePort por defecto
+        # Default to NodePort when no service type is specified.
 
         config_data = parse_config_data(deploy_pattern.group(6))
-        # Convierte el texto de configuración en diccionario
+        # Convert key-value configuration text into a dictionary.
 
         ingress_host = deploy_pattern.group(7) if deploy_pattern.group(7) else ""
         # Host del ingress si existe
@@ -377,7 +421,7 @@ def rule_based_parse(user_text: str):
         use_ingress = bool(ingress_host) or bool(
             re.search(r"(?:with|con)\s+ingress", text, re.IGNORECASE)
         )
-        # Si hay host o se menciona "with ingress", activamos ingress
+        # Enable Ingress when a host is provided or ingress is requested.
 
         return {
             "intent": "deploy",
@@ -392,7 +436,7 @@ def rule_based_parse(user_text: str):
         }
 
     # =========================
-    # SCALE explícito
+    # Explicit scale command.
     # =========================
     scale_explicit_pattern = re.search(
         r"scale\s+([a-zA-Z0-9\-]+)\s+to\s+(\d+)\s+replicas?", text, re.IGNORECASE
@@ -421,7 +465,7 @@ def rule_based_parse(user_text: str):
     )
     # Captura frases cortas tipo:
     # pon 3 replicas
-    # Aquí no sabemos app_name explícitamente → se completará con el contexto después
+    # app_name may be omitted here and completed from session context later.
 
     if scale_contextual_pattern:
         return {
@@ -440,13 +484,13 @@ def rule_based_parse(user_text: str):
     # UPDATE IMAGE
     # =========================
     update_image_pattern = re.search(
-        r"(?:change|cambia)\s+(?:(?:the|la)\s+)?(?:image|imagen)\s+(?:to|a)\s+([a-zA-Z0-9\:\._\-\/]+)",
+        r"(?:change|update|set|cambia|actualiza)\s+(?:(?:the|la)\s+)?(?:image|imagen)\s+(?:to|a)\s+([a-zA-Z0-9\:\._\-\/]+)",
         text,
         re.IGNORECASE,
     )
     # Captura:
     # change image to nginx:latest
-    # cambia la imagen a nginx:latest
+    # change image to nginx:latest
 
     if update_image_pattern:
         return {
@@ -570,6 +614,29 @@ def rule_based_parse(user_text: str):
         }
 
     # =========================
+    # PROTECTED CLUSTER DELETE / NODE DELETE
+    # =========================
+    protected_cluster_delete_pattern = re.search(
+        r"(?:delete|destroy|remove|b[oó]rrar|borra|eliminar|elimina)"
+        r".*(?:cluster|node|nodes|worker|workers|master|control-?plane)",
+        text,
+        re.IGNORECASE,
+    )
+
+    if protected_cluster_delete_pattern:
+        return {
+            "intent": "protected_cluster_operation",
+            "app_name": "cluster",
+            "image": "",
+            "replicas": 0,
+            "port": 0,
+            "service_type": "",
+            "config_data": {},
+            "use_ingress": None,
+            "ingress_host": "",
+        }
+
+    # =========================
     # DELETE
     # =========================
     delete_pattern = re.search(
@@ -679,7 +746,7 @@ def rule_based_parse(user_text: str):
             "ingress_host": "",
         }
 
-    # Si ninguna regex encaja, no se pudo interpretar por reglas
+    # If no regex matches, rule-based parsing could not interpret the request.
     return None
 
 
@@ -687,7 +754,7 @@ def llm_parse(
     user_text: str, context: dict | None = None, llm_model: str = "llama3.2:3b"
 ):
     # SEGUNDA CAPA: parseo con IA
-    # Solo se usa si rule_based_parse no ha podido interpretar el texto.
+    # Used only when rule_based_parse cannot interpret the text.
 
     context = context or {}
 
@@ -737,12 +804,12 @@ Rules:
 User request:
 {user_text}
 """
-    # Aquí construimos el prompt que le das al LLM.
-    # Le pedimos que actúe como parser estructurado, no como chatbot.
+    # Build the prompt sent to the LLM.
+    # Ask the model to behave as a structured parser, not as a chatbot.
     # Muy importante: le obligamos a devolver JSON estricto.
 
     llm = get_llm(llm_model)
-    # Obtenemos el modelo LLM local usando la función get_llm que definimos en llm_provider.py
+    # Load the local LLM through get_llm from llm_provider.py.
 
     response = llm.invoke([HumanMessage(content=prompt)])
     # Llamamos al modelo local
@@ -768,7 +835,7 @@ User request:
 
         return data
     except Exception:
-        # Si el LLM devuelve algo mal formado, lo detectas aquí
+        # Detect malformed LLM responses here.
         print("Error parseando respuesta del LLM:")
         print(content)
         return None
@@ -777,8 +844,8 @@ User request:
 def parse_user_input(
     user_text: str, context: dict | None = None, llm_model: str = "llama3.2:3b"
 ):
-    # Función principal que usa el sistema
-    # Estrategia híbrida:
+    # Main parser entry point used by the system.
+    # Hybrid strategy:
     # 1) primero reglas deterministas
     # 2) si fallan, usar IA
 

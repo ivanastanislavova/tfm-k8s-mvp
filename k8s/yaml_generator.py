@@ -2,22 +2,19 @@ import os
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+MANIFESTS_DIR = PROJECT_ROOT / "generated" / "manifests"
 
 
 def generate_deployment_yaml(app_name, image, replicas, port, use_configmap):
-    # Genera el YAML de tipo Deployment.
-    # Este recurso es el que define cuántos pods quieres, qué imagen usarán y qué puerto exponen.
-
+    # Deployment controls the desired number of pods, container image, and
+    # exposed container port for the application.
     env_from_block = ""
-    # Este bloque se añadirá solo si existe ConfigMap
 
     if use_configmap:
         env_from_block = f"""
         envFrom:
         - configMapRef:
             name: {app_name}-config"""
-        # Si hay configuración, el contenedor cargará variables desde el ConfigMap
-        # Ejemplo: ENV=prod, DEBUG=false
 
     return f"""apiVersion: apps/v1
 kind: Deployment
@@ -39,20 +36,10 @@ spec:
         ports:
         - containerPort: {port}{env_from_block}
 """
-    # Esto devuelve un string YAML completo.
-    # Puntos importantes:
-    # - metadata.name = nombre del Deployment
-    # - replicas = número de pods
-    # - selector/matchLabels = cómo Kubernetes identifica los pods de esta app
-    # - image = imagen Docker
-    # - containerPort = puerto que abre el contenedor
-    # - envFrom = conexión opcional con ConfigMap
 
 
 def generate_service_yaml(app_name, port, service_type):
-    # Genera el YAML del recurso Service.
-    # El Service sirve para exponer o conectar los pods por red.
-
+    # Service exposes the pods through the requested Kubernetes service type.
     return f"""apiVersion: v1
 kind: Service
 metadata:
@@ -66,22 +53,13 @@ spec:
     targetPort: {port}
   type: {service_type}
 """
-    # Puntos importantes:
-    # - selector.app = enlaza este Service con los pods que tengan label app=<app_name>
-    # - port = puerto del Service
-    # - targetPort = puerto del contenedor
-    # - type = NodePort o ClusterIP
 
 
 def generate_configmap_yaml(app_name, config_data):
-    # Genera el YAML del recurso ConfigMap.
-    # Un ConfigMap guarda pares clave-valor para pasar configuración al contenedor.
-
+    # ConfigMap stores key-value configuration injected into the container.
     lines = []
     for key, value in config_data.items():
         lines.append(f'  {key}: "{value}"')
-    # Convierte el diccionario en líneas YAML:
-    # ENV=prod ->   ENV: "prod"
 
     data_block = "\n".join(lines)
 
@@ -92,14 +70,10 @@ metadata:
 data:
 {data_block}
 """
-    # Devuelve el YAML del ConfigMap.
-    # Este recurso luego se conecta al Deployment con envFrom.
 
 
 def generate_ingress_yaml(app_name, port, ingress_host):
-    # Genera el YAML del recurso Ingress.
-    # El Ingress define reglas HTTP para acceder a la app usando un host/dominio.
-
+    # Ingress defines an HTTP route for the application service.
     return f"""apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -117,10 +91,6 @@ spec:
             port:
               number: {port}
 """
-    # Puntos importantes:
-    # - host = dominio o nombre tipo myweb.local
-    # - backend.service.name = Service al que apunta
-    # - backend.service.port.number = puerto del Service
 
 
 def write_yaml_files(
@@ -133,48 +103,38 @@ def write_yaml_files(
     use_ingress,
     ingress_host,
 ):
-    # Esta función es la que orquesta todo.
-    # Genera los YAMLs necesarios, los guarda en archivos .yaml y además los devuelve como texto.
+    # Generate the Kubernetes manifests, persist them as runtime artifacts, and
+    # return their contents so the UI can display the applied YAML.
+    MANIFESTS_DIR.mkdir(parents=True, exist_ok=True)
+
     if use_ingress and not ingress_host:
         ingress_host = f"{app_name}.local"
 
     deployment_yaml = generate_deployment_yaml(
         app_name, image, replicas, port, bool(config_data)
     )
-    # Genera Deployment.
-    # bool(config_data) será True si config_data no está vacío.
-
     service_yaml = generate_service_yaml(app_name, port, service_type)
-    # Genera Service.
 
-    with open(PROJECT_ROOT / "deployment.yaml", "w", encoding="utf-8") as f:
+    with open(MANIFESTS_DIR / "deployment.yaml", "w", encoding="utf-8") as f:
         f.write(deployment_yaml)
-    # Guarda deployment.yaml en disco
 
-    with open(PROJECT_ROOT / "service.yaml", "w", encoding="utf-8") as f:
+    with open(MANIFESTS_DIR / "service.yaml", "w", encoding="utf-8") as f:
         f.write(service_yaml)
-    # Guarda service.yaml en disco
 
     configmap_yaml = ""
     if config_data:
         configmap_yaml = generate_configmap_yaml(app_name, config_data)
-        with open(PROJECT_ROOT / "configmap.yaml", "w", encoding="utf-8") as f:
+        with open(MANIFESTS_DIR / "configmap.yaml", "w", encoding="utf-8") as f:
             f.write(configmap_yaml)
-    elif os.path.exists(PROJECT_ROOT / "configmap.yaml"):
-        os.remove(PROJECT_ROOT / "configmap.yaml")
-    # Solo genera y guarda configmap.yaml si hay datos de configuración
+    elif os.path.exists(MANIFESTS_DIR / "configmap.yaml"):
+        os.remove(MANIFESTS_DIR / "configmap.yaml")
 
     ingress_yaml = ""
     if use_ingress and ingress_host:
         ingress_yaml = generate_ingress_yaml(app_name, port, ingress_host)
-        with open(PROJECT_ROOT / "ingress.yaml", "w", encoding="utf-8") as f:
+        with open(MANIFESTS_DIR / "ingress.yaml", "w", encoding="utf-8") as f:
             f.write(ingress_yaml)
-    elif os.path.exists(PROJECT_ROOT / "ingress.yaml"):
-        os.remove(PROJECT_ROOT / "ingress.yaml")
-    # Solo genera y guarda ingress.yaml si se ha activado ingress y hay host
+    elif os.path.exists(MANIFESTS_DIR / "ingress.yaml"):
+        os.remove(MANIFESTS_DIR / "ingress.yaml")
 
     return deployment_yaml, service_yaml, configmap_yaml, ingress_yaml
-    # Devuelve todos los YAMLs como strings
-    # Esto se usa luego para:
-    # - guardarlos en state
-    # - mostrarlos con show_yaml

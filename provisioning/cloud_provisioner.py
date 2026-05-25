@@ -1,9 +1,10 @@
 """
-Provisiona infraestructura para el clúster.
+Provision infrastructure for the cluster.
 
 Providers:
-- terraform/oracle: usa Terraform y OCI
-- minikube: crea un clúster local reproducible
+
+- terraform/oracle: uses Terraform and OCI
+- minikube: creates a reproducible local cluster
 """
 
 import json
@@ -342,4 +343,4 @@ def provision_infrastructure(params: dict):
     if provider == "minikube":
         return provision_minikube_infrastructure(params)
 
-    raise ValueError(f"Provider no soportado: {provider}")
+    raise ValueError(f"Unsupported provider: {provider}")

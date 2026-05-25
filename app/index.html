@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>K8s Agentic Dashboard</title>
+  <title>KubeAgentFlow</title>
   <style>
     * { box-sizing: border-box; font-family: Inter, Arial, sans-serif; }
     html, body { margin: 0; min-height: 100%; background: #f5f7fb; color: #0f172a; }
@@ -266,6 +266,63 @@
       letter-spacing: -0.03em;
     }
 
+    .section-title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .section-title-row h2 {
+      margin: 0;
+    }
+
+    .info-tooltip {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      aspect-ratio: 1;
+      border-radius: 999px;
+      border: 1px solid #cbd5e1;
+      color: #64748b;
+      background: #f8fafc;
+      font-size: 12px;
+      font-weight: 900;
+      cursor: help;
+      flex: 0 0 auto;
+    }
+
+    .info-tooltip::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      left: calc(100% + 10px);
+      top: 50%;
+      transform: translateY(-50%);
+      width: 430px;
+      max-width: 52vw;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #111827;
+      color: white;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.35;
+      box-shadow: 0 12px 28px rgba(15,23,42,0.25);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+      z-index: 20;
+      white-space: normal;
+    }
+
+    .info-tooltip:hover::after,
+    .info-tooltip:focus-visible::after {
+      opacity: 1;
+      transform: translateY(-50%) translateX(2px);
+    }
+
     .grid-two {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -297,11 +354,12 @@
       white-space: nowrap;
     }
 
-    .workload-table th:nth-child(1), .workload-table td:nth-child(1) { width: 16%; }
-    .workload-table th:nth-child(2), .workload-table td:nth-child(2) { width: 48%; }
-    .workload-table th:nth-child(3), .workload-table td:nth-child(3) { width: 14%; }
-    .workload-table th:nth-child(4), .workload-table td:nth-child(4) { width: 10%; }
-    .workload-table th:nth-child(5), .workload-table td:nth-child(5) { width: 12%; }
+    .workload-table th:nth-child(1), .workload-table td:nth-child(1) { width: 15%; }
+    .workload-table th:nth-child(2), .workload-table td:nth-child(2) { width: 39%; }
+    .workload-table th:nth-child(3), .workload-table td:nth-child(3) { width: 11%; }
+    .workload-table th:nth-child(4), .workload-table td:nth-child(4) { width: 8%; }
+    .workload-table th:nth-child(5), .workload-table td:nth-child(5) { width: 15%; }
+    .workload-table th:nth-child(6), .workload-table td:nth-child(6) { width: 12%; }
 
     .workload-table td:nth-child(2) {
       white-space: normal;
@@ -316,11 +374,34 @@
       font-weight: 900;
     }
 
+    .cluster-chip {
+      display: inline-flex;
+      align-items: center;
+      max-width: 100%;
+      border-radius: 999px;
+      padding: 4px 8px;
+      background: #eef2ff;
+      color: #3730a3;
+      font-size: 12px;
+      font-weight: 900;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+
+    .cluster-chip.stale {
+      background: #fff7ed;
+      color: #c2410c;
+      border: 1px solid #fed7aa;
+    }
+
     .metrics-chart {
       margin-top: 18px;
       display: flex;
       gap: 18px;
       align-items: center;
+      justify-content: center;
       flex-wrap: wrap;
     }
 
@@ -392,6 +473,75 @@
       color: #64748b;
       font-weight: 900;
       white-space: nowrap;
+    }
+
+    .metric-name-cell {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      font-weight: 800;
+    }
+
+    .metrics-empty {
+      color: #64748b;
+      font-size: 14px;
+    }
+
+    .complexity-panel {
+      margin-top: 18px;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 16px;
+      background: #f8fafc;
+    }
+
+    .complexity-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .complexity-item {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 12px;
+      min-width: 0;
+    }
+
+    .complexity-item span {
+      display: block;
+      color: #64748b;
+      font-size: 12px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .complexity-item strong {
+      display: block;
+      font-size: 22px;
+      color: #0f172a;
+    }
+
+    .complexity-bar {
+      height: 12px;
+      border-radius: 999px;
+      background: #e2e8f0;
+      overflow: hidden;
+    }
+
+    .complexity-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #22c55e, #14b8a6);
+    }
+
+    .complexity-caption {
+      margin-top: 8px;
+      color: #64748b;
+      font-size: 13px;
+      font-weight: 700;
     }
 
     .workload-row {
@@ -726,7 +876,15 @@
       </div>
 
       <section class="section" id="workloadsSection">
-        <h2>Current Workload</h2>
+        <div class="section-title-row">
+          <h2>Current Workload</h2>
+          <span
+            class="info-tooltip"
+            tabindex="0"
+            aria-label="Workload cluster information"
+            data-tooltip="Workloads remain in the cluster profile where they were deployed. Orange cluster labels indicate a workload from a different active profile."
+          >i</span>
+        </div>
         <table class="workload-table">
           <thead>
             <tr>
@@ -734,11 +892,12 @@
               <th>Image</th>
               <th>Replicas</th>
               <th>Port</th>
+              <th>Cluster</th>
               <th>Status</th>
             </tr>
           </thead>
           <tbody id="workloadTable">
-            <tr><td colspan="5">No deployment executed yet.</td></tr>
+            <tr><td colspan="6">No deployment executed yet.</td></tr>
           </tbody>
         </table>
       </section>
@@ -801,6 +960,9 @@
         <div class="metrics-chart" id="metricsChart">
           <div class="metrics-empty">No timing chart available yet.</div>
         </div>
+        <div class="complexity-panel" id="complexityPanel">
+          <div class="metrics-empty">No operational complexity data yet.</div>
+        </div>
       </section>
     </main>
 
@@ -855,6 +1017,7 @@
     let lastValidDashboardState = null;
     let selectedWorkloadName = null;
     let navClickLockUntil = 0;
+    const metricColors = ["#2563eb", "#14b8a6", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#84cc16"];
 
     function escapeHtml(value) {
       return String(value)
@@ -916,11 +1079,21 @@
       localStorage.setItem(getWorkloadsKey(), JSON.stringify(workloadsBySession));
     }
 
+    function activeClusterProfile() {
+      const visibleProfile = document.getElementById("clusterProfile")?.textContent?.trim();
+      if (visibleProfile && visibleProfile !== "—") return visibleProfile;
+      return "minikube";
+    }
+
+    function workloadClusterProfile(data) {
+      return data.cluster_profile || data.clusterProfile || activeClusterProfile();
+    }
+
     function isWorkloadSuccess(data) {
       if (!data) return false;
       if (data.error || data.has_error) return false;
       if (data.app_name === "cluster") return false;
-      if (["delete", "list_deployments", "answer_contextual_question", "answer_question", "cluster_status", "show_app_port", "create_cluster"].includes(data.intent)) return false;
+      if (["delete", "list_deployments", "answer_contextual_question", "answer_question", "cluster_status", "show_app_port", "create_cluster", "protected_cluster_operation"].includes(data.intent)) return false;
 
       const diagnosis = data.diagnosis || data.status || "";
       if (diagnosis === "healthy") return true;
@@ -1032,6 +1205,7 @@
         replicas: data.replicas ?? "—",
         port: data.port ?? "—",
         service_type: data.service_type || "—",
+        cluster_profile: workloadClusterProfile(data),
         status: data.diagnosis || "Executed"
       };
 
@@ -1054,21 +1228,34 @@
       if (!workloadsBySession.length) {
         table.innerHTML = `
           <tr>
-            <td colspan="5">No deployment executed yet.</td>
+            <td colspan="6">No deployment executed yet.</td>
           </tr>
         `;
         return;
       }
 
-      table.innerHTML = workloadsBySession.map((item, index) => `
-        <tr class="workload-row ${item.app_name === selectedWorkloadName ? "selected" : ""}" onclick="selectWorkloadByIndex(${index})">
-          <td>${escapeHtml(item.app_name || "—")}</td>
-          <td>${escapeHtml(item.image || "—")}</td>
-          <td>${escapeHtml(item.replicas ?? "—")}</td>
-          <td>${escapeHtml(item.port ?? "—")}</td>
-          <td class="status-ok">${escapeHtml(item.status || "Executed")}</td>
-        </tr>
-      `).join("");
+      const currentProfile = activeClusterProfile();
+      table.innerHTML = workloadsBySession.map((item, index) => {
+        const itemProfile = item.cluster_profile || "minikube";
+        const stale = currentProfile !== "—" && itemProfile !== currentProfile;
+        const chipTitle = stale
+          ? `This workload was deployed on ${itemProfile}; active cluster is ${currentProfile}.`
+          : `Deployed on ${itemProfile}.`;
+        return `
+          <tr class="workload-row ${item.app_name === selectedWorkloadName ? "selected" : ""}" onclick="selectWorkloadByIndex(${index})">
+            <td>${escapeHtml(item.app_name || "—")}</td>
+            <td>${escapeHtml(item.image || "—")}</td>
+            <td>${escapeHtml(item.replicas ?? "—")}</td>
+            <td>${escapeHtml(item.port ?? "—")}</td>
+            <td>
+              <span class="cluster-chip ${stale ? "stale" : ""}" title="${escapeHtml(chipTitle)}">
+                ${escapeHtml(itemProfile)}
+              </span>
+            </td>
+            <td class="status-ok">${escapeHtml(item.status || "Executed")}</td>
+          </tr>
+        `;
+      }).join("");
     }
 
     function selectWorkloadByIndex(index) {
@@ -1452,6 +1639,7 @@
         : `<tr><td colspan="5">No cluster nodes found in the latest response.</td></tr>`;
 
       saveClusterState(data);
+      renderWorkloads();
     }
 
     function updateDashboard(data) {
@@ -1475,7 +1663,7 @@
         return;
       }
 
-      if (["list_deployments", "answer_contextual_question", "answer_question", "cluster_status", "show_app_port", "create_cluster"].includes(data.intent)) {
+      if (["list_deployments", "answer_contextual_question", "answer_question", "cluster_status", "show_app_port", "create_cluster", "protected_cluster_operation"].includes(data.intent)) {
         workloadsBySession = workloadsBySession.filter(item => item.app_name !== "cluster");
         saveWorkloads();
         renderWorkloads();
@@ -1546,12 +1734,27 @@
         </tr>
       `;
 
-      Object.entries(metrics).forEach(([key, value]) => {
-        rows += `<tr><td>${escapeHtml(key)}</td><td>${escapeHtml(value)}</td></tr>`;
+      Object.entries(metrics).forEach(([key, value], index) => {
+        const numericValue = toMetricNumber(value);
+        const color = numericValue !== null && numericValue > 0
+          ? metricColors[index % metricColors.length]
+          : "#cbd5e1";
+        rows += `
+          <tr>
+            <td>
+              <span class="metric-name-cell">
+                <span class="metric-dot" style="background:${color}"></span>
+                ${escapeHtml(formatMetricLabel(key))}
+              </span>
+            </td>
+            <td>${escapeHtml(value)}</td>
+          </tr>
+        `;
       });
 
       document.getElementById("metricsTable").innerHTML = rows;
       renderMetricsChart(data);
+      renderOperationalComplexity(data);
     }
 
     function formatMetricLabel(key) {
@@ -1570,9 +1773,8 @@
       const chart = document.getElementById("metricsChart");
       if (!chart) return;
 
-      const colors = ["#2563eb", "#14b8a6", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#84cc16"];
       const metricEntries = Object.entries(data.metrics || {})
-        .map(([key, value]) => [key, toMetricNumber(value)])
+        .map(([key, value], index) => [key, toMetricNumber(value), index])
         .filter(([, value]) => value !== null && value > 0);
 
       const totalTime = toMetricNumber(data.execution_time_seconds);
@@ -1584,20 +1786,13 @@
 
       const totalMeasured = metricEntries.reduce((sum, [, value]) => sum + value, 0);
       let currentDegree = 0;
-      const segments = metricEntries.map(([key, value], index) => {
+      const segments = metricEntries.map(([key, value, index]) => {
         const degrees = totalMeasured > 0 ? (value / totalMeasured) * 360 : 0;
         const start = currentDegree;
         const end = currentDegree + degrees;
         currentDegree = end;
-        return `${colors[index % colors.length]} ${start.toFixed(2)}deg ${end.toFixed(2)}deg`;
+        return `${metricColors[index % metricColors.length]} ${start.toFixed(2)}deg ${end.toFixed(2)}deg`;
       });
-
-      const legend = metricEntries.map(([key, value], index) => `
-        <div class="metric-legend-item">
-          <span class="metric-dot" style="background:${colors[index % colors.length]}"></span>
-          <span class="metric-legend-label">${escapeHtml(formatMetricLabel(key))}</span>
-        </div>
-      `).join("");
 
       chart.innerHTML = `
         <div class="metrics-donut" style="background: conic-gradient(${segments.join(", ")})">
@@ -1606,7 +1801,84 @@
             <span>total</span>
           </div>
         </div>
-        <div class="metrics-legend">${legend}</div>
+      `;
+    }
+
+    function estimateKubectlCommands(data) {
+      const intent = data.intent || "";
+      const hasConfig = data.config_data && Object.keys(data.config_data).length > 0;
+      const hasIngress = data.use_ingress === true;
+
+      const baseCounts = {
+        deploy: 4,
+        deploy_python: 4,
+        scale: 2,
+        update_image: 2,
+        update_port: 2,
+        update_service: 2,
+        add_config: 3,
+        enable_ingress: 4,
+        disable_ingress: 2,
+        delete: 3,
+        status: 2,
+        show_logs: 2,
+        describe_pod: 2,
+        show_yaml: 1,
+        list_deployments: 1,
+        show_app_port: 2,
+        cluster_status: 1,
+        create_cluster: data.provider === "terraform" ? 4 : 3
+      };
+
+      let commands = baseCounts[intent] || 1;
+      if (intent === "deploy") {
+        if (hasConfig) commands += 1;
+        if (hasIngress) commands += 1;
+      }
+      return Math.max(commands, 1);
+    }
+
+    function renderOperationalComplexity(data) {
+      const panel = document.getElementById("complexityPanel");
+      if (!panel) return;
+
+      if (!data || data.error) {
+        panel.innerHTML = `<div class="metrics-empty">No operational complexity data yet.</div>`;
+        return;
+      }
+
+      if (["answer_question", "answer_contextual_question", "invalid_input", "protected_cluster_operation"].includes(data.intent)) {
+        panel.innerHTML = `<div class="metrics-empty">No operational complexity data for this message.</div>`;
+        return;
+      }
+
+      const naturalRequests = 1;
+      const kubectlCommands = estimateKubectlCommands(data);
+      const reduction = kubectlCommands > 0
+        ? Math.max(0, Math.round(((kubectlCommands - naturalRequests) / kubectlCommands) * 100))
+        : 0;
+
+      panel.innerHTML = `
+        <div class="complexity-grid">
+          <div class="complexity-item">
+            <span>Natural-language request</span>
+            <strong>${naturalRequests}</strong>
+          </div>
+          <div class="complexity-item">
+            <span>Equivalent kubectl commands</span>
+            <strong>${kubectlCommands}</strong>
+          </div>
+          <div class="complexity-item">
+            <span>Manual complexity reduction</span>
+            <strong>${reduction}%</strong>
+          </div>
+        </div>
+        <div class="complexity-bar">
+          <div class="complexity-fill" style="width: ${reduction}%"></div>
+        </div>
+        <div class="complexity-caption">
+          Estimated user-facing CLI operations avoided for this request.
+        </div>
       `;
     }
 
@@ -1798,6 +2070,8 @@
       `;
       document.getElementById("metricsChart").innerHTML =
         `<div class="metrics-empty">No timing chart available yet.</div>`;
+      document.getElementById("complexityPanel").innerHTML =
+        `<div class="metrics-empty">No operational complexity data yet.</div>`;
     }
 
     window.goToSection = goToSection;
@@ -1817,4 +2091,3 @@
   </script>
 </body>
 </html>
-

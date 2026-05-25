@@ -1,29 +1,30 @@
 """
-Define los agentes del sistema (LangGraph).
+Define the system agents (LangGraph).
 
-Incluye:
-- Deploy de apps
-- Observación y diagnóstico
-- Creación de clúster (plan, provision, execute)
+Includes:
+App deployment
+Observation and diagnosis
+Cluster creation (plan, provision, execute)
 
-Cada nodo representa una acción del sistema.
+Each node represents a system action.
 """
 
 import json
 import os
+import re
 
 import time
 
-# Se usa en la espera dinámica entre comprobaciones del estado de los pods.
+# Used for dynamic waits between pod status checks.
 
 import difflib
 
-# Librería estándar para comparar strings parecidos.
-# Aquí se usa para detectar typos simples como "ngiinx" -> "nginx".
+# Standard library for comparing similar strings.
+# Used to detect simple typos such as "ngiinx" -> "nginx".
 
 import subprocess
 
-# Se usa para ejecutar comandos de shell, como kubectl o scripts de provisioning.
+# Used to run shell commands, such as kubectl or provisioning scripts.
 
 from core.state import AgentState
 
@@ -32,13 +33,13 @@ from core.state import AgentState
 
 from k8s.yaml_generator import write_yaml_files
 
-# Función que genera y guarda los YAMLs (Deployment, Service, ConfigMap, Ingress).
+# Generates and stores Kubernetes manifests.
 
 from llm.llm_yaml_generator import generate_yaml_with_llm
 from langchain_core.messages import HumanMessage
 from llm.llm_provider import get_llm
 
-# Función que genera YAMLs usando un LLM (opcional, no determinista).
+# Optional non-deterministic LLM YAML generation.
 
 from provisioning.cloud_provisioner import (
     minikube_profile_from_session,
@@ -69,20 +70,21 @@ from k8s.k8s_utils import (
     namespace_from_session,
 )
 
-# Funciones auxiliares que interactúan con Kubernetes usando kubectl.
+# Helper functions that interact with Kubernetes through kubectl.
 
 from agents.llm_agents import diagnose_with_llm, suggest_fix_with_llm
 
-# Aquí están las funciones que sí usan IA/LLM:
-# - diagnose_with_llm: diagnóstico asistido por LLM
-# - suggest_fix_with_llm: sugerencia de corrección asistida por LLM
-# Estas funciones se llaman desde los nodos de diagnóstico y reparación cuando no hay una solución determinista clara.
+# LLM-assisted helper functions:
+# - diagnose_with_llm: LLM-assisted diagnosis
+# - suggest_fix_with_llm: LLM-assisted repair suggestion
+# Called from diagnosis and repair nodes when deterministic logic is not enough.
 
 
 KNOWN_IMAGES = ["nginx", "httpd", "mongo", "redis", "postgres", "busybox"]
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# Lista de imágenes conocidas y "seguras" para detectar typos simples.
-# Esto hace que parte de la remediación sea determinista y no dependa del LLM.
+GENERATED_MANIFESTS_DIR = os.path.join(PROJECT_ROOT, "generated", "manifests")
+# Known safe images used for simple typo detection.
+# This keeps simple remediation deterministic and independent from the LLM.
 
 from agents.cluster_script_generator import generate_cluster_artifacts
 from provisioning.cluster_executor import execute_cluster_provisioning
@@ -90,9 +92,31 @@ from provisioning.cluster_executor import execute_cluster_provisioning
 from builders.python_app_builder import build_python_app
 
 
+def clean_infrastructure_log(text: str):
+    cleaned = re.sub(r"\x1b\[[0-9;]*m", "", text or "")
+    cleaned = re.sub(r"ssh-(?:ed25519|rsa)\s+[A-Za-z0-9+/=]+(?:\s+[^\n]+)?", "[redacted ssh public key]", cleaned)
+    cleaned = re.sub(r"ocid1\.[A-Za-z0-9._-]+", "[redacted ocid]", cleaned)
+    return cleaned
+
+
+def summarize_infrastructure_failure(provider: str, raw_log: str):
+    log = clean_infrastructure_log(raw_log)
+    if provider in ["terraform", "oracle"] and "Out of host capacity" in log:
+        return (
+            "Terraform connected to OCI and initialized correctly, but OCI returned "
+            "'Out of host capacity' while creating the free-tier VM. This is a cloud "
+            "capacity limitation, not a local Terraform or application error."
+        ), log
+
+    return str(raw_log), log
+
+
 def suggest_known_correction(image: str):
-    # Busca si la imagen escrita por el usuario se parece mucho
-    # a alguna imagen conocida.
+    # Check whether the user-provided image closely resembles a known image.
+    # a known image.
+    if is_explicit_image_reference(image):
+        return None
+
     normalized = (image or "").split(":", 1)[0].lower().strip()
     if normalized in KNOWN_IMAGES:
         return {"app_name": normalized, "image": f"{normalized}:latest"}
@@ -104,6 +128,45 @@ def suggest_known_correction(image: str):
     return None
 
 
+def is_explicit_image_reference(image: str):
+    image = (image or "").strip()
+    if not image:
+        return False
+
+    # Images with a registry/repository path or an explicit tag are treated
+    # as intentional user input. If they fail to pull, the system reports the
+    # error instead of replacing them with an unrelated public image.
+    return "/" in image or ":" in image
+
+
+def summarize_image_pull_failure(text: str):
+    lower = (text or "").lower()
+    if "unauthorized" in lower or "authentication required" in lower:
+        return (
+            "image pull failed for the explicit image reference: registry "
+            "authentication or authorization is required"
+        )
+    if "not found" in lower or "manifest unknown" in lower:
+        return (
+            "image pull failed for the explicit image reference: image or tag "
+            "was not found in the registry"
+        )
+    if "tls" in lower or "certificate" in lower:
+        return (
+            "image pull failed for the explicit image reference: registry TLS "
+            "or certificate validation failed"
+        )
+    if "i/o timeout" in lower or "connection refused" in lower or "no such host" in lower:
+        return (
+            "image pull failed for the explicit image reference: registry "
+            "network access failed"
+        )
+    return (
+        "image pull failed for the explicit image reference; no safe automatic "
+        "replacement was applied"
+    )
+
+
 def suggest_known_image(image: str):
     correction = suggest_known_correction(image)
     return correction["image"] if correction else None
@@ -112,17 +175,28 @@ def suggest_known_image(image: str):
 @timed_node("validate")
 def validate_node(state: AgentState):
     print("\n[AGENT] Validator Agent\n")
-    # Agente determinista.
-    # Su función es revisar si la entrada del usuario tiene sentido antes de ejecutar nada.
+    # Deterministic agent.
+    # Validates the user input before executing any infrastructure action.
 
     intent = state["intent"]
 
-    if intent in ["list_deployments", "answer_contextual_question", "answer_question"]:
+    if intent == "protected_cluster_operation":
         state["has_error"] = False
-        state["history"].append(f"Validator: validación correcta para {intent}")
+        state["diagnosis"] = "cluster_operation_requires_confirmation"
+        state["reason"] = (
+            "Cluster and node deletion is not available from the chat. "
+            "Use the session delete control to remove the associated cluster resources."
+        )
+        state["observation"] = state["reason"]
+        state["history"].append("Validator: destructive cluster operation blocked")
         return state
 
-    # Validación específica para create_cluster
+    if intent in ["list_deployments", "answer_contextual_question", "answer_question"]:
+        state["has_error"] = False
+        state["history"].append(f"Validator: validation successful for {intent}")
+        return state
+
+    # Specific validation for create_cluster.
     if intent == "create_cluster":
         masters = state.get("masters", 0)
         workers = state.get("workers", 0)
@@ -131,110 +205,110 @@ def validate_node(state: AgentState):
             state["has_error"] = True
             state["diagnosis"] = "invalid_input"
             state["reason"] = "masters must be >= 1"
-            state["history"].append("Validator: masters inválidos")
-            print("masters inválidos (debe ser >= 1).\n")
+            state["history"].append("Validator: invalid masters")
+            print("Invalid masters value; it must be >= 1.\n")
             return state
 
         if workers < 1:
             state["has_error"] = True
             state["diagnosis"] = "invalid_input"
             state["reason"] = "workers must be >= 1"
-            state["history"].append("Validator: workers inválidos")
-            print("workers inválidos (debe ser >= 1).\n")
+            state["history"].append("Validator: invalid workers")
+            print("Invalid workers value; it must be >= 1.\n")
             return state
 
-        print("Validación correcta para create_cluster.\n")
+        print("Validation successful for create_cluster.\n")
         state["has_error"] = False
-        state["history"].append("Validator: validación correcta para cluster")
+        state["history"].append("Validator: validation successful for cluster")
         return state
 
-    # Para otros intents, validación normal
+    # Standard validation for other intents.
     app_name = state["app_name"].strip()
     image = state["image"].strip()
     replicas = state["replicas"]
     port = state["port"]
     service_type = state["service_type"]
 
-    # Validación básica del nombre de la app
+    # Basic application-name validation.
     if not app_name:
         state["has_error"] = True
         state["diagnosis"] = "invalid_input"
         state["reason"] = "app_name is empty"
-        state["history"].append("Validator: app_name vacío")
-        print("app_name vacío.\n")
+        state["history"].append("Validator: empty app_name")
+        print("app_name is empty.\n")
         return state
 
     if " " in app_name:
         state["has_error"] = True
         state["diagnosis"] = "invalid_input"
         state["reason"] = "app_name contains spaces"
-        state["history"].append("Validator: app_name con espacios")
-        print("app_name contiene espacios.\n")
+        state["history"].append("Validator: app_name contains spaces")
+        print("app_name contains spaces.\n")
         return state
 
-    # Si la intención es deploy, validamos también image, replicas, port y service_type
+    # Deploy requests also validate image, replicas, port, and service_type.
     if intent == "deploy":
         if not image:
             state["has_error"] = True
             state["diagnosis"] = "invalid_input"
             state["reason"] = "image is empty"
-            state["history"].append("Validator: image vacía")
-            print("image vacía.\n")
+            state["history"].append("Validator: empty image")
+            print("image is empty.\n")
             return state
 
         if " " in image:
             state["has_error"] = True
             state["diagnosis"] = "invalid_input"
             state["reason"] = "image contains spaces"
-            state["history"].append("Validator: image con espacios")
-            print("image contiene espacios.\n")
+            state["history"].append("Validator: image contains spaces")
+            print("image contains spaces.\n")
             return state
 
         if replicas < 1:
             state["has_error"] = True
             state["diagnosis"] = "invalid_input"
             state["reason"] = "replicas must be >= 1"
-            state["history"].append("Validator: replicas inválidas")
-            print("replicas inválidas.\n")
+            state["history"].append("Validator: invalid replicas")
+            print("Invalid replicas value.\n")
             return state
 
         if port < 1:
             state["has_error"] = True
             state["diagnosis"] = "invalid_input"
             state["reason"] = "port must be >= 1"
-            state["history"].append("Validator: puerto inválido")
-            print("puerto inválido.\n")
+            state["history"].append("Validator: invalid port")
+            print("Invalid port value.\n")
             return state
 
         if service_type not in ["ClusterIP", "NodePort"]:
             state["has_error"] = True
             state["diagnosis"] = "invalid_input"
             state["reason"] = "invalid service_type"
-            state["history"].append("Validator: service_type inválido")
-            print("service_type inválido.\n")
+            state["history"].append("Validator: invalid service_type")
+            print("Invalid service_type.\n")
             return state
 
-    # Si la intención es scale, solo hace falta validar réplicas
+    # Scale requests only need replica validation.
     if intent == "scale":
         if replicas < 1:
             state["has_error"] = True
             state["diagnosis"] = "invalid_input"
             state["reason"] = "replicas must be >= 1"
-            state["history"].append("Validator: replicas inválidas en scale")
-            print("replicas inválidas.\n")
+            state["history"].append("Validator: invalid replicas in scale")
+            print("Invalid replicas value.\n")
             return state
 
-    print("Validación correcta.\n")
+    print("Validation successful.\n")
     state["has_error"] = False
-    state["history"].append("Validator: validación correcta")
+    state["history"].append("Validator: validation successful")
     return state
 
 
 @timed_node("generate_yaml_template")
 def generate_yaml_node(state: AgentState):
     print("\n[AGENT] YAML Generator Agent\n")
-    # Agente generador de infraestructura.
-    # En esta implementación es determinista: genera los YAML a partir del estado.
+    # Manifest generation agent.
+    # In this implementation it deterministically generates YAML from state.
     if state["use_ingress"] and not state["ingress_host"]:
         state["ingress_host"] = f"{state['app_name']}.local"
 
@@ -249,22 +323,22 @@ def generate_yaml_node(state: AgentState):
         state["ingress_host"],
     )
 
-    # Guardamos en el estado los YAMLs generados
+    # Store generated YAML in the shared state.
     state["deployment_yaml"] = deployment_yaml
     state["service_yaml"] = service_yaml
     state["configmap_yaml"] = configmap_yaml
     state["ingress_yaml"] = ingress_yaml
 
-    print("YAML generado.\n")
-    state["history"].append("YAML Generator: YAML generado")
+    print("YAML generated.\n")
+    state["history"].append("YAML Generator: YAML generated")
 
-    # Añadimos trazas al historial para saber qué recursos se generaron
+    # Store generated-resource traces in the technical history.
     if state["config_data"]:
-        state["history"].append("YAML Generator: ConfigMap generado")
+        state["history"].append("YAML Generator: ConfigMap generated")
 
     if state["use_ingress"] and state["ingress_host"]:
         state["history"].append(
-            f"YAML Generator: Ingress generado para host={state['ingress_host']}"
+            f"YAML Generator: Ingress generated for host={state['ingress_host']}"
         )
 
     return state
@@ -273,8 +347,8 @@ def generate_yaml_node(state: AgentState):
 @timed_node("deploy_kubectl")
 def deploy_node(state: AgentState):
     print("\n[AGENT] Execution Agent\n")
-    # Agente de ejecución.
-    # Se encarga de aplicar los manifiestos al clúster usando kubectl.
+    # Execution agent.
+    # Applies manifests to the cluster through kubectl.
 
     success, output = deploy_files(state["session_id"])
 
@@ -287,7 +361,7 @@ def deploy_node(state: AgentState):
         state["diagnosis"] = "deployment_failed"
         state["reason"] = output.strip() or "kubectl apply failed"
         state["observation"] = output
-        state["history"].append("Execution: kubectl apply falló")
+        state["history"].append("Execution: kubectl apply failed")
     else:
         state["history"].append("Execution: kubectl apply correcto")
 
@@ -297,7 +371,7 @@ def deploy_node(state: AgentState):
 @timed_node("scale")
 def scale_node(state: AgentState):
     print("\n[AGENT] Scale Agent\n")
-    # Agente especializado para escalar una aplicación ya existente.
+    # Agent specialized in scaling an existing application.
 
     success, output = scale_deployment(
         state["app_name"], state["replicas"], state["session_id"]
@@ -309,7 +383,7 @@ def scale_node(state: AgentState):
         state["diagnosis"] = "scale_failed"
         state["reason"] = "kubectl scale failed"
         state["observation"] = output
-        state["history"].append("Scale: kubectl scale falló")
+        state["history"].append("Scale: kubectl scale failed")
     else:
         state["history"].append(
             f"Scale: deployment {state['app_name']} escalado a {state['replicas']} replicas"
@@ -321,7 +395,7 @@ def scale_node(state: AgentState):
 @timed_node("delete")
 def delete_node(state: AgentState):
     print("\n[AGENT] Delete Agent\n")
-    # Agente que elimina todos los recursos asociados a la app.
+    # Agent that deletes all resources associated with the application.
 
     deleted, output = delete_app_resources(state["app_name"], state["session_id"])
     state["observation"] = output
@@ -329,12 +403,12 @@ def delete_node(state: AgentState):
     if deleted:
         state["diagnosis"] = "deleted"
         state["reason"] = "resources deleted"
-        state["history"].append(f"Delete: recursos de {state['app_name']} eliminados")
+        state["history"].append(f"Delete: resources for {state['app_name']} deleted")
     else:
         state["diagnosis"] = "not_found"
         state["reason"] = "resources not found in this session namespace"
         state["history"].append(
-            f"Delete: no hay recursos de {state['app_name']} en esta sesión"
+            f"Delete: no resources for {state['app_name']} in this session"
         )
 
     return state
@@ -556,7 +630,7 @@ def show_app_port_node(state: AgentState):
 @timed_node("observe_kubernetes")
 def observe_node(state: AgentState):
     print("\n[AGENT] Monitor Agent\n")
-    print("Observando el estado de Kubernetes con espera dinámica...\n")
+    print("Observing Kubernetes state with dynamic wait.\n")
 
     rollout_success, rollout_output = get_rollout_status(
         state["app_name"], state["session_id"], timeout_seconds=20
@@ -581,7 +655,7 @@ def observe_node(state: AgentState):
             state["diagnosis"] = "cluster_unreachable"
             state["reason"] = "kubectl get pods failed"
             state["observation"] = output
-            state["history"].append("Monitor: clúster inaccesible")
+            state["history"].append("Monitor: cluster unreachable")
             return state
 
         cleaned_output = output.strip()
@@ -630,11 +704,11 @@ def observe_node(state: AgentState):
 def diagnose_node(state: AgentState):
     print("\n[AGENT] Diagnosis Agent\n")
     # Este agente interpreta lo observado.
-    # Aquí tienes una estrategia híbrida:
+    # Hybrid diagnosis strategy:
     # 1) primero reglas deterministas
     # 2) si no basta, opcionalmente LLM
 
-    # Si ya venimos con un diagnóstico claro de otro agente, no hace falta reinterpretar
+    # Reuse clear diagnoses from previous nodes instead of reinterpreting.
     if state["diagnosis"] in [
         "deployment_failed",
         "cluster_unreachable",
@@ -647,30 +721,30 @@ def diagnose_node(state: AgentState):
         "logs_ready",
         "describe_ready",
     ]:
-        print(f"Diagnóstico: {state['diagnosis']}")
-        print(f"Razón: {state['reason']}\n")
+        print(f"Diagnosis: {state['diagnosis']}")
+        print(f"Reason: {state['reason']}\n")
         state["history"].append(f"Diagnosis: {state['diagnosis']} - {state['reason']}")
         return state
 
     observation = state["observation"].strip()
 
-    # Si no hay observación, no se puede razonar bien
+    # Diagnosis cannot proceed reliably without an observation.
     if observation == "":
         state["diagnosis"] = "unknown"
         state["reason"] = "empty observation"
         state["has_error"] = True
-        print("Diagnóstico: unknown")
-        print("Razón: empty observation\n")
-        state["history"].append("Diagnosis: observación vacía")
+        print("Diagnosis: unknown")
+        print("Reason: empty observation\n")
+        state["history"].append("Diagnosis: empty observation")
         return state
 
-    # Regla determinista para error de imagen
+    # Deterministic rule for image pull errors.
     if "ErrImagePull" in observation or "ImagePullBackOff" in observation:
         state["diagnosis"] = "image_pull_error"
         state["reason"] = "image pull failed"
         state["has_error"] = True
-        print(f"Diagnóstico: {state['diagnosis']}")
-        print(f"Razón: {state['reason']}\n")
+        print(f"Diagnosis: {state['diagnosis']}")
+        print(f"Reason: {state['reason']}\n")
         state["history"].append(f"Diagnosis: {state['diagnosis']} - {state['reason']}")
         return state
 
@@ -679,18 +753,18 @@ def diagnose_node(state: AgentState):
         state["diagnosis"] = "crash_loop"
         state["reason"] = "container crash loop detected"
         state["has_error"] = True
-        print(f"Diagnóstico: {state['diagnosis']}")
-        print(f"Razón: {state['reason']}\n")
+        print(f"Diagnosis: {state['diagnosis']}")
+        print(f"Reason: {state['reason']}\n")
         state["history"].append(f"Diagnosis: {state['diagnosis']} - {state['reason']}")
         return state
 
-    # Regla determinista para estado aún en creación
+    # Deterministic rule for resources that are still being created.
     if "Pending" in observation or "ContainerCreating" in observation:
         state["diagnosis"] = "creating"
         state["reason"] = "pods are still starting"
         state["has_error"] = False
-        print(f"Diagnóstico: {state['diagnosis']}")
-        print(f"Razón: {state['reason']}\n")
+        print(f"Diagnosis: {state['diagnosis']}")
+        print(f"Reason: {state['reason']}\n")
         state["history"].append("Stabilization: pods are still starting")
         return state
 
@@ -704,13 +778,13 @@ def diagnose_node(state: AgentState):
         state["diagnosis"] = "healthy"
         state["reason"] = "pods running"
         state["has_error"] = False
-        print(f"Diagnóstico: {state['diagnosis']}")
-        print(f"Razón: {state['reason']}\n")
+        print(f"Diagnosis: {state['diagnosis']}")
+        print(f"Reason: {state['reason']}\n")
         state["history"].append(f"Diagnosis: {state['diagnosis']} - {state['reason']}")
         return state
 
-    # Solo si no hay patrón claro, se apoya en IA
-    # Este es uno de los puntos donde sí entra el LLM
+    # Use AI only when no clear deterministic pattern matches.
+    # This is one of the points where the LLM is used.
     result = diagnose_with_llm(
         user_request=state["user_request"],
         app_name=state["app_name"],
@@ -724,17 +798,17 @@ def diagnose_node(state: AgentState):
         state["reason"] = result["reason"]
         state["has_error"] = result["diagnosis"] != "healthy"
 
-        print(f"Diagnóstico: {state['diagnosis']}")
-        print(f"Razón: {state['reason']}\n")
+        print(f"Diagnosis: {state['diagnosis']}")
+        print(f"Reason: {state['reason']}\n")
 
         state["history"].append(f"Diagnosis: {state['diagnosis']} - {state['reason']}")
     else:
         state["diagnosis"] = "unknown"
         state["reason"] = "LLM diagnosis failed"
         state["has_error"] = True
-        print("Diagnóstico: unknown")
-        print("Razón: fallo al obtener diagnóstico del LLM\n")
-        state["history"].append("Diagnosis: fallo en el LLM")
+        print("Diagnosis: unknown")
+        print("Reason: LLM diagnosis failed\n")
+        state["history"].append("Diagnosis: LLM failed")
 
     return state
 
@@ -742,22 +816,32 @@ def diagnose_node(state: AgentState):
 @timed_node("repair_deterministic")
 def repair_node(state: AgentState):
     print("\n[AGENT] Remediation Agent\n")
-    # Este es el agente que intenta corregir errores automáticamente.
-    # Es uno de los más "agentic" porque actúa sobre el problema.
+    # Agent that attempts automatic error correction.
+    # It is one of the most agentic nodes because it acts on the problem.
 
-    # Protección contra bucles infinitos
+    # Prevent infinite remediation loops.
     if state["retries"] >= state["max_retries"]:
-        print("Se alcanzó el número máximo de reintentos.\n")
-        state["history"].append("Remediation: máximo de reintentos alcanzado")
+        print("Maximum retry count reached.\n")
+        state["history"].append("Remediation: maximum retry count reached")
         return state
 
-    # Primera capa: corrección determinista usando similitud con imágenes conocidas
+    # First layer: deterministic correction using known-image similarity.
     no_pods_found = "No pods found" in (
         state.get("reason", "") + "\n" + state.get("observation", "")
     )
     if state["diagnosis"] == "image_pull_error" or (
         state["diagnosis"] == "unknown" and no_pods_found
     ):
+        if is_explicit_image_reference(state["image"]):
+            state["retries"] = state["max_retries"]
+            state["has_error"] = True
+            state["diagnosis"] = "image_pull_error_unrepaired"
+            state["reason"] = summarize_image_pull_failure(
+                state.get("observation", "") + "\n" + state.get("reason", "")
+            )
+            state["history"].append("Remediation: explicit image reference left unchanged")
+            return state
+
         correction = suggest_known_correction(state["image"])
 
         if correction and correction["image"] != state["image"]:
@@ -766,16 +850,16 @@ def repair_node(state: AgentState):
             new_app_name = correction["app_name"]
             new_image = correction["image"]
 
-            print(f"Aplicando correccion por similitud: {old_image} -> {new_image}\n")
+            print(f"Applying similarity-based correction: {old_image} -> {new_image}\n")
 
             state["image"] = new_image
 
             if state["app_name"] == old_image:
                 state["app_name"] = new_app_name
-            # Ojo: aquí además cambiamos app_name para mantener coherencia de labels/recursos
+            # Keep app_name aligned so Kubernetes labels and resources remain coherent.
 
             delete_app_resources(old_app_name, state["session_id"])
-            # Borramos recursos antiguos antes de redeploy
+            # Delete old resources before redeploying.
 
             state["retries"] += 1
             state["history"].append(
@@ -784,7 +868,7 @@ def repair_node(state: AgentState):
             return state
 
     # Segunda capa: si la regla no basta, pedir sugerencia al LLM
-    # Este es el otro gran punto donde sí entra la IA
+    # This is the other main point where the LLM is used.
     suggestion = suggest_fix_with_llm(
         app_name=state["app_name"],
         image=state["image"],
@@ -795,7 +879,7 @@ def repair_node(state: AgentState):
     )
 
     if not suggestion:
-        print("No se pudo obtener una corrección del LLM.\n")
+        print("Could not obtain an LLM correction.\n")
         state["retries"] += 1
         state["history"].append("Remediation: sin sugerencia del LLM")
         if state["diagnosis"] == "image_pull_error":
@@ -821,7 +905,7 @@ def repair_node(state: AgentState):
         old_image = state["image"]
         old_replicas = state["replicas"]
 
-        print("Aplicando corrección sugerida por el agente...\n")
+        print("Applying correction suggested by the agent.\n")
         print(f"app_name: {old_app_name} -> {new_app_name}")
         print(f"image: {old_image} -> {new_image}")
         print(f"replicas: {old_replicas} -> {new_replicas}\n")
@@ -837,8 +921,8 @@ def repair_node(state: AgentState):
             f"Remediation: corrected app={old_app_name}->{new_app_name}, image={old_image}->{new_image}, replicas={old_replicas}->{new_replicas}"
         )
     else:
-        # Si no hay corrección útil, no se cambia nada
-        print("No hay corrección segura. Se mantienen los valores actuales.\n")
+        # If there is no useful correction, keep the current values unchanged.
+        print("No safe correction found. Keeping current values.\n")
         state["retries"] += 1
         state["history"].append("Remediation: sin cambios")
         if state["diagnosis"] == "image_pull_error":
@@ -853,8 +937,8 @@ def repair_node(state: AgentState):
 @timed_node("show_yaml")
 def show_yaml_node(state: AgentState):
     print("\n[AGENT] YAML Viewer Agent\n")
-    # Agente de visualización.
-    # No despliega nada: solo devuelve los YAML ya generados.
+    # Visualization agent.
+    # It does not deploy anything; it only returns generated YAML.
 
     parts = []
 
@@ -927,7 +1011,7 @@ def describe_pod_node(state: AgentState):
 def cluster_plan_node(state: AgentState):
     print("\n[AGENT] Cluster Provisioning Agent\n")
 
-    # Usar los parámetros ya parseados del state
+    # Use parameters already parsed into the state.
     params = {
         "masters": state["masters"],
         "workers": state["workers"],
@@ -936,8 +1020,8 @@ def cluster_plan_node(state: AgentState):
         "container_runtime": "containerd",
     }
 
-    print(f"Parámetros del clúster: {params}\n")
-    state["history"].append(f"Cluster Provisioning: parámetros {params}")
+    print(f"Cluster parameters: {params}\n")
+    state["history"].append(f"Cluster Provisioning: parameters {params}")
 
     cluster_plan, master_script, worker_script, virtualbox_script, inventory = (
         generate_cluster_artifacts(params)
@@ -973,7 +1057,7 @@ def cluster_plan_node(state: AgentState):
         "Cluster Provisioning: scripts guardados en provisioning/generated_cluster/"
     )
 
-    print("Plan de clúster generado.\n")
+    print("Cluster plan generated.\n")
 
     return state
 
@@ -1030,7 +1114,7 @@ def cluster_status_node(state: AgentState):
             )
 
 
-        state["history"].append("Cluster Status: comprobación realizada")
+        state["history"].append("Cluster Status: check completed")
 
     except Exception as e:
         state["has_error"] = True
@@ -1056,24 +1140,24 @@ def cluster_execute_node(state: AgentState):
     if success:
         state["has_error"] = False
         state["diagnosis"] = "cluster_created"
-        state["reason"] = "Cluster Kubernetes creado exitosamente"
+        state["reason"] = "Kubernetes cluster created successfully"
         state["observation"] = logs
-        state["history"].append("Cluster Execute: cluster creado exitosamente")
+        state["history"].append("Cluster Execute: cluster created successfully")
     else:
         state["has_error"] = True
         state["diagnosis"] = "cluster_provisioning_failed"
-        state["reason"] = "Falló el provisioning de Kubernetes"
+        state["reason"] = "Kubernetes provisioning failed"
         state["observation"] = logs
-        state["history"].append("Cluster Execute: provisioning falló")
+        state["history"].append("Cluster Execute: provisioning failed")
 
     if state.get("provider") == "minikube":
         subprocess.run("kubectl create deployment nginx --image=nginx", shell=True)
 
     if join_command:
-        state["history"].append("Cluster Execute: join command generado y usado")
+        state["history"].append("Cluster Execute: join command generated and used")
 
-    print(f"Diagnóstico: {state['diagnosis']}")
-    print(f"Razón: {state['reason']}\n")
+    print(f"Diagnosis: {state['diagnosis']}")
+    print(f"Reason: {state['reason']}\n")
 
     return state
 
@@ -1110,21 +1194,24 @@ def cloud_provision_node(state: AgentState):
         )
 
     except Exception as e:
+        failure_reason, failure_observation = summarize_infrastructure_failure(
+            provider, str(e)
+        )
         if provider == "minikube":
             write_minikube_status(
                 params["profile"],
                 {
                     "status": "failed",
-                    "message": str(e),
-                    "logs": str(e),
+                    "message": failure_reason,
+                    "logs": failure_observation,
                 },
             )
         state["has_error"] = True
         state["diagnosis"] = "infrastructure_failed"
-        state["reason"] = str(e)
-        state["observation"] = str(e)
+        state["reason"] = failure_reason
+        state["observation"] = failure_observation
         state["history"].append(
-            "Cloud Provisioner: fallo al provisionar infraestructura"
+            "Cloud Provisioner: infrastructure provisioning failed"
         )
 
     return state
@@ -1144,13 +1231,13 @@ def build_python_app_node(state: AgentState):
         state["has_error"] = True
         state["diagnosis"] = "build_failed"
         state["reason"] = "Python app Docker build failed"
-        state["history"].append("Python Builder: build falló")
+        state["history"].append("Python Builder: build failed")
         return state
 
     state["image"] = image_name
     state["diagnosis"] = "build_ready"
     state["reason"] = "Python app image built"
-    state["history"].append(f"Python Builder: imagen generada {image_name}")
+    state["history"].append(f"Python Builder: image generated {image_name}")
 
     return state
 
@@ -1177,10 +1264,11 @@ def generate_llm_yaml_node(state: AgentState):
         state["has_error"] = True
         state["diagnosis"] = "llm_yaml_invalid"
         state["reason"] = message
-        state["history"].append("LLM YAML Generator: YAML inválido")
+        state["history"].append("LLM YAML Generator: invalid YAML")
         return state
 
-    llm_yaml_path = os.path.join(PROJECT_ROOT, "llm_generated.yaml")
+    os.makedirs(GENERATED_MANIFESTS_DIR, exist_ok=True)
+    llm_yaml_path = os.path.join(GENERATED_MANIFESTS_DIR, "llm_generated.yaml")
 
     with open(llm_yaml_path, "w", encoding="utf-8") as f:
         f.write(yaml_text)
@@ -1188,9 +1276,9 @@ def generate_llm_yaml_node(state: AgentState):
     state["has_error"] = False
     state["diagnosis"] = "llm_yaml_ready"
     state["reason"] = "YAML generated completely by LLM"
-    state["history"].append("LLM YAML Generator: YAML generado por IA")
+    state["history"].append("LLM YAML Generator: YAML generated by AI")
 
-    print("YAML generado completamente por el LLM.\n")
+    print("YAML generated completely by the LLM.\n")
 
     return state
 
@@ -1209,15 +1297,6 @@ def deploy_llm_yaml_node(state: AgentState):
         state["history"].append("LLM YAML Execution: namespace creation failed")
         return state
 
-    if "timed out waiting for the condition" in observation or "exceeded its progress deadline" in observation:
-        state["diagnosis"] = "rollout_failed"
-        state["reason"] = "deployment rollout did not complete"
-        state["has_error"] = True
-        print(f"DiagnÃ³stico: {state['diagnosis']}")
-        print(f"RazÃ³n: {state['reason']}\n")
-        state["history"].append(f"Diagnosis: {state['diagnosis']} - {state['reason']}")
-        return state
-
     dry_run = subprocess.run(
         [
             *kubectl_command(state["session_id"]),
@@ -1226,7 +1305,7 @@ def deploy_llm_yaml_node(state: AgentState):
             "-n",
             namespace,
             "-f",
-            os.path.join(PROJECT_ROOT, "llm_generated.yaml"),
+            os.path.join(GENERATED_MANIFESTS_DIR, "llm_generated.yaml"),
         ],
         capture_output=True,
         text=True,
@@ -1237,7 +1316,7 @@ def deploy_llm_yaml_node(state: AgentState):
         state["diagnosis"] = "llm_yaml_dry_run_failed"
         state["reason"] = "kubectl dry-run failed"
         state["observation"] = dry_run.stdout + dry_run.stderr
-        state["history"].append("LLM YAML Execution: dry-run falló")
+        state["history"].append("LLM YAML Execution: dry-run failed")
         return state
 
     result = subprocess.run(
@@ -1247,7 +1326,7 @@ def deploy_llm_yaml_node(state: AgentState):
             "-n",
             namespace,
             "-f",
-            os.path.join(PROJECT_ROOT, "llm_generated.yaml"),
+            os.path.join(GENERATED_MANIFESTS_DIR, "llm_generated.yaml"),
         ],
         capture_output=True,
         text=True,
@@ -1259,7 +1338,7 @@ def deploy_llm_yaml_node(state: AgentState):
         state["has_error"] = True
         state["diagnosis"] = "deployment_failed"
         state["reason"] = state["observation"].strip() or "kubectl apply failed"
-        state["history"].append("LLM YAML Execution: kubectl apply falló")
+        state["history"].append("LLM YAML Execution: kubectl apply failed")
     else:
         state["has_error"] = False
         state["history"].append("LLM YAML Execution: kubectl apply correcto")

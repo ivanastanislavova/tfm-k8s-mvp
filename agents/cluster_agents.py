@@ -1,12 +1,13 @@
 """
-Agente LLM para interpretar creación de clúster.
+LLM Agent for interpreting cluster creation.
 
-Extrae:
-- masters
-- workers
-- configuración básica
+Extracts:
 
-Solo genera parámetros, no ejecuta comandos.
+* masters
+* workers
+* basic configuration
+
+Only generates parameters, does not execute commands.
 """
 
 from langchain_ollama import ChatOllama
