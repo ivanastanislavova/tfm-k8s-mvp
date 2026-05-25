@@ -7,7 +7,11 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from core.graph_builder import build_graph
-from llm.llm_parser import infer_app_name_from_image, parse_user_input
+from llm.llm_parser import (
+    infer_app_name_from_image,
+    normalize_known_image_alias,
+    parse_user_input,
+)
 from core.conversation_manager import ConversationManager
 
 from core.metrics import save_evaluation_result
@@ -119,6 +123,9 @@ def deploy(request: DeployRequest):
             and parsed.get("image")
         ):
             parsed["app_name"] = infer_app_name_from_image(parsed["image"])
+
+        if parsed.get("intent") in {"deploy", "update_image"} and parsed.get("image"):
+            parsed["image"] = normalize_known_image_alias(parsed["image"])
 
         if parsed.get("intent") == "update_image":
             parsed["image"] = _resolve_contextual_image_update(

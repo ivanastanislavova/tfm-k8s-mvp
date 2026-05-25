@@ -288,6 +288,14 @@ def validate_node(state: AgentState):
             print("Invalid service_type.\n")
             return state
 
+    if intent == "update_image" and state["image"] == "__MISSING_IMAGE__":
+        state["has_error"] = True
+        state["diagnosis"] = "missing_image"
+        state["reason"] = "Please specify the target image or tag, for example: update image to nginx:latest"
+        state["history"].append("Validator: missing image for update_image")
+        print("Missing target image for update_image.\n")
+        return state
+
     # Scale requests only need replica validation.
     if intent == "scale":
         if replicas < 1:

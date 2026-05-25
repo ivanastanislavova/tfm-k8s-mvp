@@ -83,14 +83,26 @@ def normalize_app_reference(name: str):
     return name
 
 
+KNOWN_IMAGE_ALIASES = {
+    "apache": "httpd:latest",
+    "apache2": "httpd:latest",
+}
+
+
+def normalize_known_image_alias(image: str):
+    image = (image or "").strip()
+    if not image:
+        return image
+    return KNOWN_IMAGE_ALIASES.get(image.lower(), image)
+
+
 def infer_app_name_from_image(image: str):
     image = (image or "").strip()
     if not image:
         return ""
 
-    # Registry paths such as bitnami/nginx or ghcr.io/user/api:v1
-    # are valid image names, but Kubernetes labels/resource names
-    # need a simple DNS-compatible application name.
+    # Registry paths such as bitnami/nginx or ghcr.io/user/api:v1 are valid
+    # image names, but Kubernetes labels need a simple DNS-compatible name.
     name = image.rsplit("/", 1)[-1]
     name = name.split(":", 1)[0]
     name = re.sub(r"[^a-zA-Z0-9\-]+", "-", name).strip("-").lower()
@@ -436,6 +448,33 @@ def rule_based_parse(user_text: str):
         }
 
     # =========================
+    # COMBINED SCALE + SERVICE UPDATE
+    # =========================
+    combined_replicas_pattern = re.search(
+        r"(?:scale(?:\s+[a-zA-Z0-9\-]+)?\s+to|set|change|with|to)\s+(\d+)\s+replicas?",
+        text,
+        re.IGNORECASE,
+    )
+    combined_service_pattern = re.search(
+        r"(Cluster\s*IP|ClusterIP|Node\s*Port|NodePort)",
+        text,
+        re.IGNORECASE,
+    )
+
+    if combined_replicas_pattern and combined_service_pattern:
+        return {
+            "intent": "update_service",
+            "app_name": "",
+            "image": "",
+            "replicas": int(combined_replicas_pattern.group(1)),
+            "port": 0,
+            "service_type": normalize_service_type(combined_service_pattern.group(1)),
+            "config_data": {},
+            "use_ingress": None,
+            "ingress_host": "",
+        }
+
+    # =========================
     # Explicit scale command.
     # =========================
     scale_explicit_pattern = re.search(
@@ -461,9 +500,11 @@ def rule_based_parse(user_text: str):
     # SCALE contextual
     # =========================
     scale_contextual_pattern = re.search(
-        r"pon\s+(\d+)\s+replicas?", text, re.IGNORECASE
+        r"(?:scale\s+to|set|pon)\s+(\d+)\s+replicas?", text, re.IGNORECASE
     )
-    # Captura frases cortas tipo:
+    # Captures short contextual requests such as:
+    # scale to 3 replicas
+    # set 3 replicas
     # pon 3 replicas
     # app_name may be omitted here and completed from session context later.
 
@@ -488,6 +529,13 @@ def rule_based_parse(user_text: str):
         text,
         re.IGNORECASE,
     )
+
+    if not update_image_pattern:
+        update_image_pattern = re.search(
+            r"(?:change|update|set|cambia|actualiza)\s+(?:to|a)\s+([a-zA-Z0-9\:\._\-\/]+)\s+(?:image|imagen)",
+            text,
+            re.IGNORECASE,
+        )
     # Captura:
     # change image to nginx:latest
     # change image to nginx:latest
@@ -497,6 +545,25 @@ def rule_based_parse(user_text: str):
             "intent": "update_image",
             "app_name": "",
             "image": update_image_pattern.group(1),
+            "replicas": 0,
+            "port": 0,
+            "service_type": "",
+            "config_data": {},
+            "use_ingress": None,
+            "ingress_host": "",
+        }
+
+    incomplete_update_image_pattern = re.search(
+        r"^(?:change|update|set|cambia|actualiza)\s+(?:(?:the|la)\s+)?(?:image|imagen)\s*$",
+        text,
+        re.IGNORECASE,
+    )
+
+    if incomplete_update_image_pattern:
+        return {
+            "intent": "update_image",
+            "app_name": "",
+            "image": "__MISSING_IMAGE__",
             "replicas": 0,
             "port": 0,
             "service_type": "",

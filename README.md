@@ -23,51 +23,39 @@ After installing Docker Desktop, start it and wait until the Docker engine is ru
 
 ### 2. Clone the repository
 
-```powershell
 git clone https://github.com/ivanastanislavova/tfm-k8s-mvp.git
 cd tfm-k8s-mvp
-```
 
 ### 3. Create and activate the Python environment
 
-```powershell
 py -3.11 -m venv venv
 .\venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-```
 
 If `py -3.11` is not available, use:
 
-```powershell
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-```
 
 ### 4. Install the local LLM models
 
 Start Ollama and download the default model:
 
-```powershell
 ollama pull llama3.2:3b
-```
 
 Optional comparison model:
 
-```powershell
 ollama pull mistral
-```
 
 ### 5. Start a local Kubernetes cluster
 
 Make sure Docker Desktop is running, then start Minikube:
 
-```powershell
 minikube start --driver=docker
 kubectl get nodes
-```
 
 The second command should show at least one node in `Ready` state.
 
@@ -75,28 +63,22 @@ The second command should show at least one node in `Ready` state.
 
 From the repository root:
 
-```powershell
 .\venv\Scripts\uvicorn.exe app.api:app --reload --host 127.0.0.1 --port 8000
-```
 
 Open the web interface:
 
-```text
 http://127.0.0.1:8000
-```
 
 ### 7. Try example requests
 
 Use the chat panel with requests such as:
 
-```text
 deploy nginx with 2 replicas
 scale nginx to 3 replicas
 show logs
 what deployments are active?
 change nginx service to ClusterIP
 delete nginx
-```
 
 The default mode is `Hybrid`, where Kubernetes YAML generation is deterministic and the LLM is used for natural-language interpretation and diagnosis support.
 
@@ -108,23 +90,17 @@ The Terraform workflow creates OCI virtual machines that can be used for Kuberne
 
 Install OCI CLI and run:
 
-```powershell
 oci setup config
-```
 
 This creates a local OCI config file, usually at:
 
-```text
 C:\Users\<your-user>\.oci\config
-```
 
 ### 2. Create a local Terraform variables file
 
 Copy the example file:
 
-```powershell
 Copy-Item provisioning\terraform\terraform.tfvars.example provisioning\terraform\terraform.tfvars
-```
 
 Edit `provisioning\terraform\terraform.tfvars` with your own:
 
@@ -138,26 +114,21 @@ Do not commit `terraform.tfvars`; it is intentionally ignored because it contain
 
 ### 3. Test Terraform manually
 
-```powershell
 cd provisioning\terraform
 terraform init
 terraform plan
 cd ..\..
-```
 
 ### 4. Trigger Terraform from the chat
 
 In the web interface, use a request such as:
 
-```text
 create a cluster with 1 master and 1 worker with terraform
-```
 
 If OCI returns `Out of host capacity`, Terraform and KubeAgentFlow are connected correctly, but the free-tier region currently has no available VM capacity for the requested shape.
 
 ## Project Structure
 
-```text
 app/                     FastAPI entrypoint and web interface
 app/assets/              UI assets, including logo.png
 agents/                  LangGraph workflow nodes
@@ -170,7 +141,6 @@ scripts/                 Evaluation and plotting scripts
 charts/                  Helm baseline chart
 generated/               Runtime-generated artifacts
 results/                 Evaluation outputs
-```
 
 Generated runtime files are intentionally kept out of the repository root. Kubernetes manifests created by the application are written under `generated/manifests/`.
 
